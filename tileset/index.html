@@ -33,18 +33,35 @@
         const tileIndexMap = {
             0: 0,
 			1: 20,
+			3: 36,
+			5: 33,
+			6: 38,
 			9: 34,
+			10: 32,
+			13: 43,
 			16: 1,
-			47: 47,
+			24: 16,
+			29: 43,
+			38: 38,
+			37: 33,
+			26: 32,
+			42: 32,
 			48: 3,
 			51: 36,
 			57: 34,
 			58: 32,
 			59: 42,
+			66: 24,
 			69: 33,
+			70: 38,
 			73: 34,
+			103: 45,
 			133: 33,
+			141: 43,
 			176: 7,
+			198: 38,
+			232: 19,
+			208: 13,
 			218: 32,
 			244: 31,
 			245: 33,
@@ -52,7 +69,8 @@
 			250: 32,
 			253: 43,
 			254: 44,
-			255: 46
+			255: 46,
+			256: 47,
         };
 		
 		// Einfache Perlin Noise Funktion
@@ -117,7 +135,7 @@
 			if (x > 0 && y < map.length - 1 && map[y + 1][x - 1] === 1) bitValue |= 64; // Unten Links
 			if (x < map[y].length - 1 && y < map.length - 1 && map[y + 1][x + 1] === 1) bitValue |= 128; // Unten Rechts
 
-			if(map[y][x] == 1) bitValue = 47
+			if(map[y][x] == 1) bitValue = 256
 
             return {
                 bitValue: bitValue,
@@ -126,7 +144,7 @@
         }
 
         tilesetImage.onload = function() {
-            ctx.font = '8px Arial'; // Kleine Schriftgröße für die Anzeige der Werte
+            ctx.font = '12px Arial'; // Kleine Schriftgröße für die Anzeige der Werte
             ctx.fillStyle = 'white'; // Weiße Farbe für die Textanzeige
             ctx.textAlign = 'center'; // Zentrierter Text
             ctx.textBaseline = 'middle'; // Mittlere Textausrichtung
