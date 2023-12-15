@@ -1,0 +1,42 @@
+name: Generate Index Page
+
+on:
+  push:
+    branches:
+      - main  # oder den Branch deiner Wahl
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Generate index.html
+      run: |
+        function list_folders() {
+          local dir=$1
+          echo "<ul>"
+          for subdir in "$dir"*/ ; do
+            if [ -d "$subdir" ]; then
+              local subdir_name=$(basename "$subdir")
+              echo "<li><a href='$subdir'>$subdir_name</a>"
+              list_folders "$subdir"
+              echo "</li>"
+            fi
+          done
+          echo "</ul>"
+        }
+
+        echo "<html><body><h1>Verzeichnisliste</h1>" > index.html
+        list_folders .
+        echo "</body></html>" >> index.html
+
+    - name: Commit and push if changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add index.html
+        git commit -m "Automatically update index.html" -a || true
+        git push
