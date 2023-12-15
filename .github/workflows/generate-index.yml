@@ -1,10 +1,5 @@
 name: Generate Index Page
 
-on:
-  push:
-    branches:
-      - main  # oder den Branch deiner Wahl
-
 jobs:
   build:
     runs-on: ubuntu-latest
