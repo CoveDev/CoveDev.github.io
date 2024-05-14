@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Canvas Image Upload and Download</title>
+</head>
+<body>
+  <input type="file" id="upload" accept="image/*">
+  <br>
+  <textarea id="prefixes" placeholder="Enter prefixes and positions in JSON format"></textarea>
+  <br>
+  <button id="downloadBtn">Download Sections</button>
+  <br>
+  <canvas id="previewCanvas" width="256" height="256" style="border:1px solid #000000;"></canvas>
+
+  <script>
+    class ImageHandler {
+      constructor(canvasId, fileInputId, prefixesInputId, downloadBtnId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.fileInput = document.getElementById(fileInputId);
+        this.prefixesInput = document.getElementById(prefixesInputId);
+        this.downloadBtn = document.getElementById(downloadBtnId);
+        this.image = new Image();
+
+        this.addEventListeners();
+      }
+
+      addEventListeners() {
+        this.fileInput.addEventListener('change', (e) => this.loadImage(e));
+        this.downloadBtn.addEventListener('click', () => this.handleDownload());
+      }
+
+      loadImage(event) {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+          this.image.onload = () => {
+            this.drawCanvas();
+          };
+          this.image.src = e.target.result;
+        };
+
+        reader.readAsDataURL(file);
+      }
+
+      drawCanvas() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.drawImage(this.image, 0, 0, 256, 256);
+      }
+
+      handleDownload() {
+        const input = this.prefixesInput.value;
+        let configurations;
+
+        try {
+          configurations = JSON.parse(input);
+        } catch (e) {
+          alert('Invalid JSON format');
+          return;
+        }
+
+        configurations.forEach(config => {
+          const { prefix, startX, startY, stepX, stepY, steps, size } = config;
+          this.downloadSections(prefix, startX, startY, stepX, stepY, steps, size);
+        });
+      }
+
+      downloadSections(prefix, startX, startY, stepX, stepY, steps, size) {
+        for (let i = 0; i < steps; i++) {
+          for (let j = 0; j < steps; j++) {
+            const x = startX + i * stepX;
+            const y = startY + j * stepY;
+            const filename = `${prefix}_${i + 1}_${j + 1}.png`;
+            this.downloadSection(x, y, size, filename);
+          }
+        }
+      }
+
+      downloadSection(x, y, size, filename) {
+        const sectionCanvas = document.createElement('canvas');
+        sectionCanvas.width = size;
+        sectionCanvas.height = size;
+        const sectionCtx = sectionCanvas.getContext('2d');
+
+        sectionCtx.drawImage(this.canvas, x, y, size, size, 0, 0, size, size);
+
+        const dataURL = sectionCanvas.toDataURL('image/png');
+
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = filename;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    }
+
+    // Initialisieren Sie die ImageHandler-Klasse
+    new ImageHandler('previewCanvas', 'upload', 'prefixes', 'downloadBtn');
+  </script>
+</body>
+</html>
