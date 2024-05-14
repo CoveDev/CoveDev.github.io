@@ -63,14 +63,14 @@
         }
 
         configurations.forEach(config => {
-          const { prefix, startX, startY, stepX, stepY, steps, size } = config;
-          this.downloadSections(prefix, startX, startY, stepX, stepY, steps, size);
+          const { prefix, startX, startY, stepX, stepY, stepsX, stepsY, size } = config;
+          this.downloadSections(prefix, startX, startY, stepX, stepY, stepsX, stepsY, size);
         });
       }
 
-      downloadSections(prefix, startX, startY, stepX, stepY, steps, size) {
-        for (let i = 0; i < steps; i++) {
-          for (let j = 0; j < steps; j++) {
+      downloadSections(prefix, startX, startY, stepX, stepY, stepsX, stepsY, size) {
+        for (let i = 0; i < stepsX; i++) {
+          for (let j = 0; j < stepsY; j++) {
             const x = startX + i * stepX;
             const y = startY + j * stepY;
             const filename = `${prefix}_${i + 1}_${j + 1}.png`;
