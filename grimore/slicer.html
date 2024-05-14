@@ -6,7 +6,12 @@
 <body>
   <input type="file" id="upload" accept="image/*">
   <br>
-  <textarea id="prefixes" placeholder="Enter prefixes and positions in JSON format"></textarea>
+  <textarea id="prefixes" style="width: 400px; height: 200px;">
+[
+  {"prefix": "prefix1", "startX": 0, "startY": 0, "stepX": 16, "stepY": 16, "stepsX": 1, "stepsY": 5, "size": 16},
+  {"prefix": "prefix2", "startX": 16, "startY": 0, "stepX": 16, "stepY": 16, "stepsX": 1, "stepsY": 5, "size": 16}
+]
+  </textarea>
   <br>
   <button id="downloadBtn">Download Sections</button>
   <br>
@@ -99,7 +104,6 @@
       }
     }
 
-    // Initialisieren Sie die ImageHandler-Klasse
     new ImageHandler('previewCanvas', 'upload', 'prefixes', 'downloadBtn');
   </script>
 </body>
