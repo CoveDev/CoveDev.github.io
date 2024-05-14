@@ -10,7 +10,7 @@
   <br>
   <button id="downloadBtn">Download Sections</button>
   <br>
-  <canvas id="previewCanvas" width="256" height="256" style="border:1px solid #000000;"></canvas>
+  <canvas id="previewCanvas" style="border:1px solid #000000;"></canvas>
 
   <script>
     class ImageHandler {
@@ -45,8 +45,10 @@
       }
 
       drawCanvas() {
+        this.canvas.width = this.image.width;
+        this.canvas.height = this.image.height;
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.drawImage(this.image, 0, 0, 256, 256);
+        this.ctx.drawImage(this.image, 0, 0, this.image.width, this.image.height);
       }
 
       handleDownload() {
