@@ -8,8 +8,8 @@
   <br>
   <textarea id="prefixes" style="width: 945px; height: 152px;">
 [
-  {"prefix": "prefix1", "startX": 0, "startY": 0, "stepX": 16, "stepY": 16, "stepsX": 1, "stepsY": 5, "size": 16},
-  {"prefix": "prefix2", "startX": 16, "startY": 0, "stepX": 16, "stepY": 16, "stepsX": 1, "stepsY": 5, "size": 16}
+  {"prefix": "prefix1", "startX": 0, "startY": 0, "stepX": 16, "stepY": 16, "stepsX": 2, "stepsY": 2, "size": 16},
+  {"prefix": "prefix2", "startX": 0, "startY": 0, "size": 64}
 ]
   </textarea>
   <br>
@@ -76,7 +76,7 @@
 
         configurations.forEach(config => {
           const { prefix, startX, startY, stepX, stepY, stepsX, stepsY, size } = config;
-          this.downloadSections(prefix, startX, startY, stepX, stepY, stepsX, stepsY, size);
+          this.downloadSections(prefix, startX || 0, startY || 0, stepX || size, stepY || size, stepsX || 1, stepsY || 1, size || 16);
         });
       }
 
