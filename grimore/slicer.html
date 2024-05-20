@@ -9,7 +9,9 @@
   <textarea id="prefixes" style="width: 945px; height: 152px;">
 [
   {"prefix": "prefix1", "startX": 0, "startY": 0, "stepX": 16, "stepY": 16, "stepsX": 2, "stepsY": 2, "size": 16},
-  {"prefix": "prefix2", "startX": 0, "startY": 0, "size": 64}
+  {"prefix": "prefix2", "startX": 32, "startY": 32, "size": 32},
+  {"prefix": "prefix3", "startX": 64, "startY": 64, "stepX": 64, "stepY": 64, "stepsX": 2, "stepsY": 2, "sizeX": 32, "sizeY": 32},
+  {"prefix": "amogus_axt", "startX": 0, "startY": 0, "stepX": 64, "stepY": 64, "stepsX": 4, "stepsY": 8, "size": 64}
 ]
   </textarea>
   <br>
@@ -75,29 +77,29 @@
         }
 
         configurations.forEach(config => {
-          const { prefix, startX, startY, stepX, stepY, stepsX, stepsY, size } = config;
-          this.downloadSections(prefix, startX || 0, startY || 0, stepX || size, stepY || size, stepsX || 1, stepsY || 1, size || 16);
+          const { prefix, startX, startY, stepX, stepY, stepsX, stepsY, size, sizeX, sizeY } = config;
+          this.downloadSections(prefix, startX || 0, startY || 0, stepX || sizeX || size, stepY || sizeY || size, stepsX || 1, stepsY || 1, sizeX || size, sizeY || size || 16);
         });
       }
 
-      downloadSections(prefix, startX, startY, stepX, stepY, stepsX, stepsY, size) {
+      downloadSections(prefix, startX, startY, stepX, stepY, stepsX, stepsY, sizeX, sizeY) {
         for (let i = 0; i < stepsX; i++) {
           for (let j = 0; j < stepsY; j++) {
             const x = startX + i * stepX;
             const y = startY + j * stepY;
             const filename = `${prefix}_${i}_${j}.png`;
-            this.downloadSection(x, y, size, filename);
+            this.downloadSection(x, y, sizeX, sizeY, filename);
           }
         }
       }
 
-      downloadSection(x, y, size, filename) {
+      downloadSection(x, y, sizeX, sizeY, filename) {
         const sectionCanvas = document.createElement('canvas');
-        sectionCanvas.width = size;
-        sectionCanvas.height = size;
+        sectionCanvas.width = sizeX;
+        sectionCanvas.height = sizeY;
         const sectionCtx = sectionCanvas.getContext('2d');
 
-        sectionCtx.drawImage(this.canvas, x, y, size, size, 0, 0, size, size);
+        sectionCtx.drawImage(this.canvas, x, y, sizeX, sizeY, 0, 0, sizeX, sizeY);
 
         const dataURL = sectionCanvas.toDataURL('image/png');
 
