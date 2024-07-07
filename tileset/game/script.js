@@ -130,6 +130,23 @@ class Character {
         }
         return true;
     }
+
+    updateDirection(dx, dy) {
+        if (dx === 0 && dy === 0) return;
+
+        if (dy < 0) {
+            if (dx < 0) this.direction = 'oben links';
+            else if (dx > 0) this.direction = 'oben rechts';
+            else this.direction = 'oben';
+        } else if (dy > 0) {
+            if (dx < 0) this.direction = 'unten links';
+            else if (dx > 0) this.direction = 'unten rechts';
+            else this.direction = 'unten';
+        } else {
+            if (dx < 0) this.direction = 'links';
+            else if (dx > 0) this.direction = 'rechts';
+        }
+    }
 }
 
 class Player extends Character {
@@ -237,22 +254,22 @@ class Slime extends Character {
             y,
             { width: 12, height: 12 },
             1,
-            -14,
-            -21,
+            -8,
+            -8,
             'unten',
             {
-                'oben': 0,
-                'oben rechts': 1,
-                'rechts': 2,
-                'unten rechts': 3,
-                'unten': 4,
-                'unten links': 5,
-                'links': 6,
-                'oben links': 7
+                'oben': 5,
+                'oben rechts': 6,
+                'rechts': 7,
+                'unten rechts': 0,
+                'unten': 1,
+                'unten links': 2,
+                'links': 3,
+                'oben links': 4
             },
             {
-                idle: new Animation('slime_animations.png', 4, 44, 44, 200, 0),
-                move: new Animation('slime_animations.png', 4, 44, 44, 100, 5)
+                idle: new Animation('slime_animations.png', 4, 44, 44, 200, 5),
+                move: new Animation('slime_animations.png', 4, 44, 44, 100, 0)
             }
         );
     }
@@ -267,6 +284,8 @@ class Slime extends Character {
             let newX = this.x + directionX * this.speed;
             let newY = this.y + directionY * this.speed;
 
+            this.updateDirection(directionX, directionY);
+
             if (this.canMoveTo(newX, this.y, tiles, tilesX, tilesY)) {
                 this.x = newX;
             }
@@ -274,6 +293,10 @@ class Slime extends Character {
             if (this.canMoveTo(this.x, newY, tiles, tilesX, tilesY)) {
                 this.y = newY;
             }
+
+            this.currentAnimation = this.animations.move;
+        } else {
+            this.currentAnimation = this.animations.idle;
         }
         this.currentAnimation.update();
     }
@@ -287,28 +310,30 @@ class Gatherer extends Character {
             y,
             { width: 10, height: 10 },
             1.2,
-            -14,
-            -21,
+            -10,
+            -10,
             'unten',
             {
-                'oben': 0,
-                'oben rechts': 1,
-                'rechts': 2,
-                'unten rechts': 3,
-                'unten': 4,
-                'unten links': 5,
-                'links': 6,
-                'oben links': 7
+                'oben': 5,
+                'oben rechts': 6,
+                'rechts': 7,
+                'unten rechts': 0,
+                'unten': 1,
+                'unten links': 2,
+                'links': 3,
+                'oben links': 4
             },
             {
-                idle: new Animation('gatherer_animations.png', 4, 44, 44, 200, 0),
-                walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 5)
+                idle: new Animation('gatherer_animations.png', 4, 44, 44, 200, 5),
+                walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0)
             }
         );
         this.target = null;
     }
 
     update(player, tiles, tilesX, tilesY) {
+        let dx = 0;
+        let dy = 0;
         if (this.target) {
             let directionX = this.target.x - this.x;
             let directionY = this.target.y - this.y;
@@ -319,20 +344,22 @@ class Gatherer extends Character {
             } else {
                 directionX /= distance;
                 directionY /= distance;
-                let newX = this.x + directionX * this.speed;
-                let newY = this.y + directionY * this.speed;
-
-                if (this.canMoveTo(newX, this.y, tiles, tilesX, tilesY)) {
-                    this.x = newX;
-                }
-
-                if (this.canMoveTo(this.x, newY, tiles, tilesX, tilesY)) {
-                    this.y = newY;
-                }
+                dx = directionX * this.speed;
+                dy = directionY * this.speed;
             }
         } else {
             // Randomly roam around or follow player commands
         }
+
+        if (this.canMoveTo(this.x + dx, this.y, tiles, tilesX, tilesY)) {
+            this.x += dx;
+        }
+
+        if (this.canMoveTo(this.x, this.y + dy, tiles, tilesX, tilesY)) {
+            this.y += dy;
+        }
+
+        this.updateDirection(dx, dy);
         this.currentAnimation.update();
     }
 
@@ -501,5 +528,5 @@ class SimplexNoise {
 }
 
 window.onload = () => {
-    new Game('game', 282345);  // Seed für die Perlin-Noise-Generierung
-};
+    new Game('game', 282345);
+}
