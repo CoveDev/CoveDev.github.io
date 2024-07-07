@@ -11,6 +11,7 @@ class Game {
         this.noise = new SimplexNoise(seed);
         this.generatePerlinWorld(50, 50);  // Generiere eine 50x50 Perlin Noise Welt
         this.camera = new Camera(this.canvas.width, this.canvas.height, this.tilesX * this.tileSize, this.tilesY * this.tileSize);
+        this.debug = true;  // Debug-Variable zum Anzeigen der Hitboxen
         this.initEvents();
         this.resizeCanvas();
         window.requestAnimationFrame(() => this.gameLoop());
@@ -51,7 +52,7 @@ class Game {
             this.player.update(this.tiles, this.tilesX, this.tilesY);
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
-            this.player.draw(this.context, this.camera);
+            this.player.draw(this.context, this.camera, this.debug);
         }
         window.requestAnimationFrame(() => this.gameLoop());
     }
@@ -83,9 +84,10 @@ class Player {
         this.x = 0;
         this.y = 0;
         this.tileSize = tileSize;
+        this.hitbox = { width: 8, height: 8 };  // Kleinere Hitbox
         this.speed = 1.5;
-        this.offsetX = -8;  // Beispieloffset für die x-Position
-        this.offsetY = -16; // Beispieloffset für die y-Position (größer als die Hitbox)
+        this.offsetX = -14;
+        this.offsetY = -21;
         this.direction = 'unten'; // Initiale Richtung des Charakters
         this.directions = {
             'oben': 5,
@@ -99,15 +101,21 @@ class Player {
         };
         this.animations = {
             idle: new Animation('player_animations.png', 4, 44, 44, 200, 5),
-            walk: new Animation('player_animations.png', 4, 44, 44, 90, 0)
+            walk: new Animation('player_animations.png', 4, 44, 44, 100, 0)
             // Weitere Animationen hier hinzufügen
         };
         this.currentAnimation = this.animations.idle;
         this.keys = { w: false, a: false, s: false, d: false };
     }
 
-    draw(context, camera) {
-        this.currentAnimation.draw(context, this.x - camera.x + this.offsetX, this.y - camera.y + this.offsetY, this.directions[this.direction]);
+    draw(context, camera, debug) {
+        const drawX = Math.floor(this.x - camera.x + this.offsetX);
+        const drawY = Math.floor(this.y - camera.y + this.offsetY);
+        this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
+        if (debug) {
+            context.strokeStyle = 'red';
+            context.strokeRect(Math.floor(this.x - camera.x + (this.tileSize - this.hitbox.width) / 2), Math.floor(this.y - camera.y + (this.tileSize - this.hitbox.height) / 2), this.hitbox.width, this.hitbox.height);
+        }
     }
 
     handleKeyDown(event) {
@@ -178,11 +186,14 @@ class Player {
     }
 
     canMoveTo(newX, newY, tiles, tilesX, tilesY) {
+        const hitboxX = newX + (this.tileSize - this.hitbox.width) / 2;
+        const hitboxY = newY + (this.tileSize - this.hitbox.height) / 2;
+
         const corners = [
-            { x: newX, y: newY },  // Top-left
-            { x: newX + this.tileSize - 1, y: newY },  // Top-right
-            { x: newX, y: newY + this.tileSize - 1 },  // Bottom-left
-            { x: newX + this.tileSize - 1, y: newY + this.tileSize - 1 }  // Bottom-right
+            { x: hitboxX, y: hitboxY },  // Top-left
+            { x: hitboxX + this.hitbox.width - 1, y: hitboxY },  // Top-right
+            { x: hitboxX, y: hitboxY + this.hitbox.height - 1 },  // Bottom-left
+            { x: hitboxX + this.hitbox.width - 1, y: hitboxY + this.hitbox.height - 1 }  // Bottom-right
         ];
 
         for (let corner of corners) {
