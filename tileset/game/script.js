@@ -345,8 +345,8 @@ class Gatherer extends Character {
             y,
             { width: 10, height: 10 },
             1.2,
-            -10,
-            -10,
+            -14,
+            -21,
             'unten',
             {
                 'oben': 5,
@@ -363,52 +363,116 @@ class Gatherer extends Character {
                 walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0)
             }
         );
-        this.waypoints = [];
+        this.path = [];
+        this.pathIndex = 0;
     }
 
     update(player, tiles, tilesX, tilesY) {
-        let dx = 0;
-        let dy = 0;
-
-        if (this.waypoints.length > 0) {
-            let target = this.waypoints[0];
-            let directionX = target.x - this.x;
-            let directionY = target.y - this.y;
+        if (this.path.length > 0) {
+            let target = this.path[this.pathIndex];
+            let directionX = target.x * this.tileSize - this.x;
+            let directionY = target.y * this.tileSize - this.y;
             let distance = Math.sqrt(directionX * directionX + directionY * directionY);
 
             if (distance < 5) {
                 // Reached waypoint
-                this.waypoints.shift();
+                this.pathIndex++;
+                if (this.pathIndex >= this.path.length) {
+                    this.path = [];
+                    this.pathIndex = 0;
+                }
             } else {
                 directionX /= distance;
                 directionY /= distance;
-                dx = directionX * this.speed;
-                dy = directionY * this.speed;
+                let dx = directionX * this.speed;
+                let dy = directionY * this.speed;
+
+                if (this.canMoveTo(this.x + dx, this.y, tiles, tilesX, tilesY)) {
+                    this.x += dx;
+                }
+
+                if (this.canMoveTo(this.x, this.y + dy, tiles, tilesX, tilesY)) {
+                    this.y += dy;
+                }
+
+                this.updateDirection(dx, dy);
             }
-        }
-
-        if (this.canMoveTo(this.x + dx, this.y, tiles, tilesX, tilesY)) {
-            this.x += dx;
-        }
-
-        if (this.canMoveTo(this.x, this.y + dy, tiles, tilesX, tilesY)) {
-            this.y += dy;
-        }
-
-        this.updateDirection(dx, dy);
-
-        if (dx !== 0 || dy !== 0) {
-            this.currentAnimation = this.animations.walk;
-        } else {
-            this.currentAnimation = this.animations.idle;
         }
 
         this.currentAnimation.update();
     }
 
-    setWaypoint(x, y) {
-        this.waypoints.push({ x, y });
+    setWaypoint(worldX, worldY) {
+        const start = { x: Math.floor(this.x / this.tileSize), y: Math.floor(this.y / this.tileSize) };
+        const end = { x: Math.floor(worldX / this.tileSize), y: Math.floor(worldY / this.tileSize) };
+        this.path = astar(this.tiles, start, end);
+        this.pathIndex = 0;
     }
+}
+
+// A* Algorithmus-Implementierung
+function astar(grid, start, end) {
+    const openSet = [];
+    const closedSet = [];
+    const cameFrom = {};
+    const gScore = {};
+    const fScore = {};
+
+    openSet.push(start);
+    gScore[`${start.x},${start.y}`] = 0;
+    fScore[`${start.x},${start.y}`] = heuristic(start, end);
+
+    while (openSet.length > 0) {
+        let current = openSet.reduce((acc, node) => (fScore[`${node.x},${node.y}`] < fScore[`${acc.x},${acc.y}`] ? node : acc), openSet[0]);
+
+        if (current.x === end.x && current.y === end.y) {
+            return reconstructPath(cameFrom, current);
+        }
+
+        openSet.splice(openSet.indexOf(current), 1);
+        closedSet.push(current);
+
+        getNeighbors(current).forEach(neighbor => {
+            if (closedSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) return;
+
+            const tentativeGScore = gScore[`${current.x},${current.y}`] + 1;
+
+            if (!openSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) {
+                openSet.push(neighbor);
+            } else if (tentativeGScore >= gScore[`${neighbor.x},${neighbor.y}`]) {
+                return;
+            }
+
+            cameFrom[`${neighbor.x},${neighbor.y}`] = current;
+            gScore[`${neighbor.x},${neighbor.y}`] = tentativeGScore;
+            fScore[`${neighbor.x},${neighbor.y}`] = gScore[`${neighbor.x},${neighbor.y}`] + heuristic(neighbor, end);
+        });
+    }
+
+    return [];
+}
+
+function heuristic(a, b) {
+    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+function reconstructPath(cameFrom, current) {
+    const totalPath = [current];
+    while (`${current.x},${current.y}` in cameFrom) {
+        current = cameFrom[`${current.x},${current.y}`];
+        totalPath.unshift(current);
+    }
+    return totalPath;
+}
+
+function getNeighbors(node) {
+    const neighbors = [
+        { x: node.x - 1, y: node.y },
+        { x: node.x + 1, y: node.y },
+        { x: node.x, y: node.y - 1 },
+        { x: node.x, y: node.y + 1 }
+    ];
+    return neighbors.filter(n => n.x >= 0 && n.y >= 0);
 }
 
 class Camera {
