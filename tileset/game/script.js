@@ -6,6 +6,8 @@ class Game {
         this.tilesetSize = 16;
         this.tiles = [];
         this.player = new Player(this.tileSize);
+        this.enemies = [new Slime(this.tileSize, 100, 100)];
+        this.allies = [new Gatherer(this.tileSize, 200, 200)];
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
@@ -50,9 +52,13 @@ class Game {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         if (this.tiles.length > 0) {
             this.player.update(this.tiles, this.tilesX, this.tilesY);
+            this.enemies.forEach(enemy => enemy.update(this.player, this.tiles, this.tilesX, this.tilesY));
+            this.allies.forEach(ally => ally.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
             this.player.draw(this.context, this.camera, this.debug);
+            this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug));
+            this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
         }
         window.requestAnimationFrame(() => this.gameLoop());
     }
@@ -79,33 +85,19 @@ class Game {
     }
 }
 
-class Player {
-    constructor(tileSize) {
-        this.x = 0;
-        this.y = 0;
+class Character {
+    constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations) {
         this.tileSize = tileSize;
-        this.hitbox = { width: 8, height: 8 };  // Kleinere Hitbox
-        this.speed = 1.5;
-        this.offsetX = -14;
-        this.offsetY = -21;
-        this.direction = 'unten'; // Initiale Richtung des Charakters
-        this.directions = {
-            'oben': 5,
-            'oben rechts': 6,
-            'rechts': 7,
-            'unten rechts': 0,
-            'unten': 1,
-            'unten links': 2,
-            'links': 3,
-            'oben links': 4
-        };
-        this.animations = {
-            idle: new Animation('player_animations.png', 4, 44, 44, 200, 5),
-            walk: new Animation('player_animations.png', 4, 44, 44, 100, 0)
-            // Weitere Animationen hier hinzufügen
-        };
+        this.x = x;
+        this.y = y;
+        this.hitbox = hitbox;
+        this.speed = speed;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
+        this.direction = direction;
+        this.directions = directions;
+        this.animations = animations;
         this.currentAnimation = this.animations.idle;
-        this.keys = { w: false, a: false, s: false, d: false };
     }
 
     draw(context, camera, debug) {
@@ -116,6 +108,57 @@ class Player {
             context.strokeStyle = 'red';
             context.strokeRect(Math.floor(this.x - camera.x + (this.tileSize - this.hitbox.width) / 2), Math.floor(this.y - camera.y + (this.tileSize - this.hitbox.height) / 2), this.hitbox.width, this.hitbox.height);
         }
+    }
+
+    canMoveTo(newX, newY, tiles, tilesX, tilesY) {
+        const hitboxX = newX + (this.tileSize - this.hitbox.width) / 2;
+        const hitboxY = newY + (this.tileSize - this.hitbox.height) / 2;
+
+        const corners = [
+            { x: hitboxX, y: hitboxY },  // Top-left
+            { x: hitboxX + this.hitbox.width - 1, y: hitboxY },  // Top-right
+            { x: hitboxX, y: hitboxY + this.hitbox.height - 1 },  // Bottom-left
+            { x: hitboxX + this.hitbox.width - 1, y: hitboxY + this.hitbox.height - 1 }  // Bottom-right
+        ];
+
+        for (let corner of corners) {
+            const tileX = Math.floor(corner.x / this.tileSize);
+            const tileY = Math.floor(corner.y / this.tileSize);
+            if (tileX < 0 || tileX >= tilesX || tileY < 0 || tileY >= tilesY || tiles[tileY][tileX] === 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+class Player extends Character {
+    constructor(tileSize) {
+        super(
+            tileSize,
+            0,
+            0,
+            { width: 8, height: 8 },
+            1.5,
+            -14,
+            -21,
+            'unten',
+            {
+                'oben': 5,
+                'oben rechts': 6,
+                'rechts': 7,
+                'unten rechts': 0,
+                'unten': 1,
+                'unten links': 2,
+                'links': 3,
+                'oben links': 4
+            },
+            {
+                idle: new Animation('player_animations.png', 4, 44, 44, 200, 5),
+                walk: new Animation('player_animations.png', 4, 44, 44, 100, 0)
+            }
+        );
+        this.keys = { w: false, a: false, s: false, d: false };
     }
 
     handleKeyDown(event) {
@@ -184,26 +227,117 @@ class Player {
             this.currentAnimation = this.animations.idle;
         }
     }
+}
 
-    canMoveTo(newX, newY, tiles, tilesX, tilesY) {
-        const hitboxX = newX + (this.tileSize - this.hitbox.width) / 2;
-        const hitboxY = newY + (this.tileSize - this.hitbox.height) / 2;
+class Slime extends Character {
+    constructor(tileSize, x, y) {
+        super(
+            tileSize,
+            x,
+            y,
+            { width: 12, height: 12 },
+            1,
+            -14,
+            -21,
+            'unten',
+            {
+                'oben': 0,
+                'oben rechts': 1,
+                'rechts': 2,
+                'unten rechts': 3,
+                'unten': 4,
+                'unten links': 5,
+                'links': 6,
+                'oben links': 7
+            },
+            {
+                idle: new Animation('slime_animations.png', 4, 44, 44, 200, 0),
+                move: new Animation('slime_animations.png', 4, 44, 44, 100, 5)
+            }
+        );
+    }
 
-        const corners = [
-            { x: hitboxX, y: hitboxY },  // Top-left
-            { x: hitboxX + this.hitbox.width - 1, y: hitboxY },  // Top-right
-            { x: hitboxX, y: hitboxY + this.hitbox.height - 1 },  // Bottom-left
-            { x: hitboxX + this.hitbox.width - 1, y: hitboxY + this.hitbox.height - 1 }  // Bottom-right
-        ];
+    update(player, tiles, tilesX, tilesY) {
+        let directionX = player.x - this.x;
+        let directionY = player.y - this.y;
+        let distance = Math.sqrt(directionX * directionX + directionY * directionY);
+        if (distance < 100) {
+            directionX /= distance;
+            directionY /= distance;
+            let newX = this.x + directionX * this.speed;
+            let newY = this.y + directionY * this.speed;
 
-        for (let corner of corners) {
-            const tileX = Math.floor(corner.x / this.tileSize);
-            const tileY = Math.floor(corner.y / this.tileSize);
-            if (tileX < 0 || tileX >= tilesX || tileY < 0 || tileY >= tilesY || tiles[tileY][tileX] === 1) {
-                return false;
+            if (this.canMoveTo(newX, this.y, tiles, tilesX, tilesY)) {
+                this.x = newX;
+            }
+
+            if (this.canMoveTo(this.x, newY, tiles, tilesX, tilesY)) {
+                this.y = newY;
             }
         }
-        return true;
+        this.currentAnimation.update();
+    }
+}
+
+class Gatherer extends Character {
+    constructor(tileSize, x, y) {
+        super(
+            tileSize,
+            x,
+            y,
+            { width: 10, height: 10 },
+            1.2,
+            -14,
+            -21,
+            'unten',
+            {
+                'oben': 0,
+                'oben rechts': 1,
+                'rechts': 2,
+                'unten rechts': 3,
+                'unten': 4,
+                'unten links': 5,
+                'links': 6,
+                'oben links': 7
+            },
+            {
+                idle: new Animation('gatherer_animations.png', 4, 44, 44, 200, 0),
+                walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 5)
+            }
+        );
+        this.target = null;
+    }
+
+    update(player, tiles, tilesX, tilesY) {
+        if (this.target) {
+            let directionX = this.target.x - this.x;
+            let directionY = this.target.y - this.y;
+            let distance = Math.sqrt(directionX * directionX + directionY * directionY);
+            if (distance < 10) {
+                // Reached target, simulate gathering resources
+                this.target = null;
+            } else {
+                directionX /= distance;
+                directionY /= distance;
+                let newX = this.x + directionX * this.speed;
+                let newY = this.y + directionY * this.speed;
+
+                if (this.canMoveTo(newX, this.y, tiles, tilesX, tilesY)) {
+                    this.x = newX;
+                }
+
+                if (this.canMoveTo(this.x, newY, tiles, tilesX, tilesY)) {
+                    this.y = newY;
+                }
+            }
+        } else {
+            // Randomly roam around or follow player commands
+        }
+        this.currentAnimation.update();
+    }
+
+    setTarget(x, y) {
+        this.target = { x, y };
     }
 }
 
@@ -276,8 +410,6 @@ class Animation {
         );
     }
 }
-
-// SimplexNoise-Klasse bleibt unverändert
 
 class SimplexNoise {
     constructor(seed) {
@@ -369,5 +501,5 @@ class SimplexNoise {
 }
 
 window.onload = () => {
-    new Game('game', 122345);  // Seed für die Perlin-Noise-Generierung
+    new Game('game', 282345);  // Seed für die Perlin-Noise-Generierung
 };
