@@ -1,3 +1,31 @@
+
+class Camera {
+    constructor(viewportWidth, viewportHeight, worldWidth, worldHeight) {
+        this.viewportWidth = viewportWidth;
+        this.viewportHeight = viewportHeight;
+        this.worldWidth = worldWidth;
+        this.worldHeight = worldHeight;
+        this.x = 0;
+        this.y = 0;
+    }
+
+    resize(viewportWidth, viewportHeight) {
+        this.viewportWidth = viewportWidth;
+        this.viewportHeight = viewportHeight;
+    }
+
+    update(targetX, targetY) {
+        this.x = targetX - this.viewportWidth / 2;
+        this.y = targetY - this.viewportHeight / 2;
+
+        // Begrenze die Kamera auf die Weltgrenzen
+        this.x = Math.max(0, Math.min(this.x, this.worldWidth - this.viewportWidth));
+        this.y = Math.max(0, Math.min(this.y, this.worldHeight - this.viewportHeight));
+    }
+}
+
+// SimplexNoise-Klasse bleibt unverändert
+
 class SimplexNoise {
     constructor(seed) {
         this.perm = this.buildPermutationTable(seed);
@@ -87,7 +115,6 @@ class SimplexNoise {
     }
 }
 
-// Game class and other parts remain the same, with slight modification to use the new SimplexNoise class
 
 class Game {
     constructor(canvasId, seed) {
@@ -101,8 +128,16 @@ class Game {
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
         this.generatePerlinWorld(50, 50);  // Generiere eine 50x50 Perlin Noise Welt
+        this.camera = new Camera(this.canvas.width, this.canvas.height, this.tilesX * this.tileSize, this.tilesY * this.tileSize);
         this.initEvents();
+        this.resizeCanvas();
         window.requestAnimationFrame(() => this.gameLoop());
+    }
+
+    resizeCanvas() {
+        this.canvas.width = window.innerWidth/4;
+        this.canvas.height = window.innerHeight/4;
+        this.camera.resize(this.canvas.width, this.canvas.height);
     }
 
     generatePerlinWorld(width, height) {
@@ -131,20 +166,30 @@ class Game {
     gameLoop() {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         if (this.tiles.length > 0) {
+            this.camera.update(this.player.x, this.player.y);
             this.drawTiles();
             this.player.update(this.tiles, this.tilesX, this.tilesY);
-            this.player.draw(this.context);
+            this.player.draw(this.context, this.camera);
         }
         window.requestAnimationFrame(() => this.gameLoop());
     }
 
     drawTiles() {
-        for (let y = 0; y < this.tilesY; y++) {
-            for (let x = 0; x < this.tilesX; x++) {
-                if (this.tiles[y][x] === 1) {
-                    this.context.drawImage(this.tilesetImage, 16, 0, this.tilesetSize, this.tilesetSize, x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
-                } else {
-                    this.context.drawImage(this.tilesetImage, 0, 0, this.tilesetSize, this.tilesetSize, x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
+        const startCol = Math.floor(this.camera.x / this.tileSize);
+        const endCol = startCol + Math.ceil(this.camera.viewportWidth / this.tileSize);
+        const startRow = Math.floor(this.camera.y / this.tileSize);
+        const endRow = startRow + Math.ceil(this.camera.viewportHeight / this.tileSize);
+        const offsetX = -this.camera.x + startCol * this.tileSize;
+        const offsetY = -this.camera.y + startRow * this.tileSize;
+
+        for (let y = startRow; y <= endRow; y++) {
+            for (let x = startCol; x <= endCol; x++) {
+                if (y >= 0 && y < this.tilesY && x >= 0 && x < this.tilesX) {
+                    if (this.tiles[y][x] === 1) {
+                        this.context.drawImage(this.tilesetImage, 16, 0, this.tilesetSize, this.tilesetSize, (x - startCol) * this.tileSize + offsetX, (y - startRow) * this.tileSize + offsetY, this.tileSize, this.tileSize);
+                    } else {
+                        this.context.drawImage(this.tilesetImage, 0, 0, this.tilesetSize, this.tilesetSize, (x - startCol) * this.tileSize + offsetX, (y - startRow) * this.tileSize + offsetY, this.tileSize, this.tileSize);
+                    }
                 }
             }
         }
@@ -162,8 +207,8 @@ class Player {
         this.keys = { w: false, a: false, s: false, d: false };
     }
 
-    draw(context) {
-        context.drawImage(this.image, this.x, this.y, this.tileSize, this.tileSize);
+    draw(context, camera) {
+        context.drawImage(this.image, this.x - camera.x, this.y - camera.y, this.tileSize, this.tileSize);
     }
 
     handleKeyDown(event) {
@@ -216,5 +261,5 @@ class Player {
 }
 
 window.onload = () => {
-    new Game('game', 122235);  // Seed für die Perlin-Noise-Generierung
+    new Game('game', 122345);  // Seed für die Perlin-Noise-Generierung
 };
