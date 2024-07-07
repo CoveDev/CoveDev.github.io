@@ -77,6 +77,7 @@ class Game {
         if (!gathererClicked) {
             if (this.selectedGatherer) {
                 this.selectedGatherer.setWaypoint(worldX, worldY, this.tiles, this.tilesX, this.tilesY);
+                this.selectedGatherer = null; // Deselektiere den Gatherer
             }
         }
     }
@@ -110,12 +111,70 @@ class Game {
         );
     }
 
+    checkCollisions() {
+        const characters = [this.player, ...this.enemies, ...this.allies];
+        for (let i = 0; i < characters.length; i++) {
+            for (let j = i + 1; j < characters.length; j++) {
+                if (this.areColliding(characters[i], characters[j])) {
+                    this.resolveCollision(characters[i], characters[j]);
+                }
+            }
+        }
+    }
+
+    areColliding(character1, character2) {
+        const hitbox1 = {
+            x: character1.x + (this.tileSize - character1.hitbox.width) / 2,
+            y: character1.y + (this.tileSize - character1.hitbox.height) / 2,
+            width: character1.hitbox.width,
+            height: character1.hitbox.height
+        };
+        const hitbox2 = {
+            x: character2.x + (this.tileSize - character2.hitbox.width) / 2,
+            y: character2.y + (this.tileSize - character2.hitbox.height) / 2,
+            width: character2.hitbox.width,
+            height: character2.hitbox.height
+        };
+
+        return (
+            hitbox1.x < hitbox2.x + hitbox2.width &&
+            hitbox1.x + hitbox1.width > hitbox2.x &&
+            hitbox1.y < hitbox2.y + hitbox2.height &&
+            hitbox1.y + hitbox1.height > hitbox2.y
+        );
+    }
+
+    resolveCollision(character1, character2) {
+        const dx = (character1.x + character1.tileSize / 2) - (character2.x + character2.tileSize / 2);
+        const dy = (character1.y + character1.tileSize / 2) - (character2.y + character2.tileSize / 2);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance === 0) return; // Prevent division by zero
+
+        const overlap = (character1.hitbox.width / 2 + character2.hitbox.width / 2) - distance;
+        const pushX = dx / distance * overlap / 2;
+        const pushY = dy / distance * overlap / 2;
+
+        // Check if moving character1 will cause a collision with walls
+        if (character1.canMoveTo(character1.x + pushX, character1.y + pushY, this.tiles, this.tilesX, this.tilesY)) {
+            character1.x += pushX;
+            character1.y += pushY;
+        }
+
+        // Check if moving character2 will cause a collision with walls
+        if (character2.canMoveTo(character2.x - pushX, character2.y - pushY, this.tiles, this.tilesX, this.tilesY)) {
+            character2.x -= pushX;
+            character2.y -= pushY;
+        }
+    }
+
     gameLoop() {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         if (this.tiles.length > 0) {
             this.player.update(this.tiles, this.tilesX, this.tilesY);
             this.enemies.forEach(enemy => enemy.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.allies.forEach(ally => ally.update(this.player, this.tiles, this.tilesX, this.tilesY));
+            this.checkCollisions();
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
             this.player.draw(this.context, this.camera, this.debug);
