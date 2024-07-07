@@ -7,7 +7,10 @@ class Game {
         this.tiles = [];
         this.player = new Player(this.tileSize);
         this.enemies = [new Slime(this.tileSize, 100, 100)];
-        this.allies = [new Gatherer(this.tileSize, 200, 200)];
+        this.allies = [
+            new Gatherer(this.tileSize, 200, 200),
+            new Gatherer(this.tileSize, 250, 250) // Zweiter Gatherer
+        ];
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
@@ -49,25 +52,50 @@ class Game {
         window.addEventListener('keyup', (event) => this.player.handleKeyUp(event));
 
         this.canvas.addEventListener('click', (event) => this.handleCanvasClick(event));
+        this.canvas.addEventListener('contextmenu', (event) => this.handleCanvasRightClick(event));
     }
 
     handleCanvasClick(event) {
+        event.preventDefault();
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
-        const worldX = mouseX/4 + this.camera.x;
-        const worldY = mouseY/4 + this.camera.y;
+        const worldX = mouseX / 4 + this.camera.x;
+        const worldY = mouseY / 4 + this.camera.y;
 
         console.log(`Mouse: ${worldX}, ${worldY}`);
 
+        let gathererClicked = false;
+
+        this.allies.forEach(ally => {
+            if (this.isInsideHitbox(worldX, worldY, ally)) {
+                this.selectedGatherer = ally;
+                gathererClicked = true;
+            }
+        });
+
+        if (!gathererClicked) {
+            if (this.selectedGatherer) {
+                this.selectedGatherer.setWaypoint(worldX, worldY, this.tiles, this.tilesX, this.tilesY);
+            }
+        }
+    }
+
+    handleCanvasRightClick(event) {
+        event.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        const worldX = mouseX / 4 + this.camera.x;
+        const worldY = mouseY / 4 + this.camera.y;
+
+        console.log(`Right Mouse: ${worldX}, ${worldY}`);
+
+        // Hier können Sie eine andere Aktion für den Rechtsklick implementieren
+        // Zum Beispiel: den ausgewählten Gatherer deselektieren
         if (this.selectedGatherer) {
-            this.selectedGatherer.setWaypoint(worldX, worldY, this.tiles, this.tilesX, this.tilesY);
-        } else {
-            this.allies.forEach(ally => {
-                if (this.isInsideHitbox(worldX, worldY, ally)) {
-                    this.selectedGatherer = ally;
-                }
-            });
+            this.selectedGatherer = null; // Deselektiere den Gatherer
+            console.log('Gatherer deselected');
         }
     }
 
