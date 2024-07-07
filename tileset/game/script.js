@@ -14,6 +14,7 @@ class Game {
         this.generatePerlinWorld(50, 50);  // Generiere eine 50x50 Perlin Noise Welt
         this.camera = new Camera(this.canvas.width, this.canvas.height, this.tilesX * this.tileSize, this.tilesY * this.tileSize);
         this.debug = true;  // Debug-Variable zum Anzeigen der Hitboxen
+        this.selectedGatherer = null;  // Der ausgewählte Gatherer
         this.initEvents();
         this.resizeCanvas();
         window.requestAnimationFrame(() => this.gameLoop());
@@ -46,6 +47,40 @@ class Game {
 
         window.addEventListener('keydown', (event) => this.player.handleKeyDown(event));
         window.addEventListener('keyup', (event) => this.player.handleKeyUp(event));
+
+        this.canvas.addEventListener('click', (event) => this.handleCanvasClick(event));
+    }
+
+    handleCanvasClick(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        const worldX = mouseX/4 + this.camera.x;
+        const worldY = mouseY/4 + this.camera.y;
+
+        console.log(`Mouse: ${worldX}, ${worldY}`);
+
+        if (this.selectedGatherer) {
+            this.selectedGatherer.setWaypoint(worldX, worldY);
+        } else {
+            console.log(this.allies[0].x, this.allies[0].y)
+            this.allies.forEach(ally => {
+                if (this.isInsideHitbox(worldX, worldY, ally)) {
+                    this.selectedGatherer = ally;
+                }
+            });
+        }
+    }
+
+    isInsideHitbox(mouseX, mouseY, character) {
+        const characterX = character.x + (this.tileSize - character.hitbox.width) / 2;
+        const characterY = character.y + (this.tileSize - character.hitbox.height) / 2;
+        return (
+            mouseX >= characterX &&
+            mouseX <= characterX + character.hitbox.width &&
+            mouseY >= characterY &&
+            mouseY <= characterY + character.hitbox.height
+        );
     }
 
     gameLoop() {
@@ -328,27 +363,28 @@ class Gatherer extends Character {
                 walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0)
             }
         );
-        this.target = null;
+        this.waypoints = [];
     }
 
     update(player, tiles, tilesX, tilesY) {
         let dx = 0;
         let dy = 0;
-        if (this.target) {
-            let directionX = this.target.x - this.x;
-            let directionY = this.target.y - this.y;
+
+        if (this.waypoints.length > 0) {
+            let target = this.waypoints[0];
+            let directionX = target.x - this.x;
+            let directionY = target.y - this.y;
             let distance = Math.sqrt(directionX * directionX + directionY * directionY);
-            if (distance < 10) {
-                // Reached target, simulate gathering resources
-                this.target = null;
+
+            if (distance < 5) {
+                // Reached waypoint
+                this.waypoints.shift();
             } else {
                 directionX /= distance;
                 directionY /= distance;
                 dx = directionX * this.speed;
                 dy = directionY * this.speed;
             }
-        } else {
-            // Randomly roam around or follow player commands
         }
 
         if (this.canMoveTo(this.x + dx, this.y, tiles, tilesX, tilesY)) {
@@ -360,11 +396,18 @@ class Gatherer extends Character {
         }
 
         this.updateDirection(dx, dy);
+
+        if (dx !== 0 || dy !== 0) {
+            this.currentAnimation = this.animations.walk;
+        } else {
+            this.currentAnimation = this.animations.idle;
+        }
+
         this.currentAnimation.update();
     }
 
-    setTarget(x, y) {
-        this.target = { x, y };
+    setWaypoint(x, y) {
+        this.waypoints.push({ x, y });
     }
 }
 
@@ -528,5 +571,5 @@ class SimplexNoise {
 }
 
 window.onload = () => {
-    new Game('game', 282345);
-}
+    game = new Game('game', 282345);  // Seed für die Perlin-Noise-Generierung
+};
