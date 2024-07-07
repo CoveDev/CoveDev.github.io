@@ -312,7 +312,7 @@ class Slime extends Character {
         let directionX = player.x - this.x;
         let directionY = player.y - this.y;
         let distance = Math.sqrt(directionX * directionX + directionY * directionY);
-        if (distance < 100) {
+        if (distance < 50) {
             directionX /= distance;
             directionY /= distance;
             let newX = this.x + directionX * this.speed;
@@ -342,7 +342,7 @@ class Gatherer extends Character {
             tileSize,
             x,
             y,
-            { width: 10, height: 10 },
+            { width: 8, height: 8 },
             1.2,
             -14,
             -21,
@@ -364,16 +364,21 @@ class Gatherer extends Character {
         );
         this.path = [];
         this.pathIndex = 0;
+        this.stuckCounter = 0;
+        this.previousPosition = { x: this.x, y: this.y };
     }
 
     update(player, tiles, tilesX, tilesY) {
         if (this.path.length > 0) {
+            this.currentAnimation = this.animations.walk;
             let target = this.path[this.pathIndex];
-            let directionX = target.x * this.tileSize - this.x;
-            let directionY = target.y * this.tileSize - this.y;
+            let targetX = target.x * this.tileSize + (this.tileSize - this.hitbox.width) / 2;
+            let targetY = target.y * this.tileSize + (this.tileSize - this.hitbox.height) / 2;
+            let directionX = targetX - this.x;
+            let directionY = targetY - this.y;
             let distance = Math.sqrt(directionX * directionX + directionY * directionY);
 
-            if (distance < 5) {
+            if (distance < 4) {
                 // Reached waypoint
                 this.pathIndex++;
                 if (this.pathIndex >= this.path.length) {
@@ -395,7 +400,17 @@ class Gatherer extends Character {
                 }
 
                 this.updateDirection(dx, dy);
+
+                if (this.isStuck()) {
+                    console.log('Gatherer is stuck, aborting path');
+                    this.path = [];
+                    this.pathIndex = 0;
+                    this.currentAnimation = this.animations.idle;
+                }
             }
+        }
+        else{
+            this.currentAnimation = this.animations.idle;
         }
 
         this.currentAnimation.update();
@@ -406,8 +421,22 @@ class Gatherer extends Character {
         const end = { x: Math.floor(worldX / this.tileSize), y: Math.floor(worldY / this.tileSize) };
         this.path = astar(tiles, start, end, tilesX, tilesY);
         this.pathIndex = 0;
+        this.stuckCounter = 0; // Reset stuck counter when setting a new waypoint
+    }
+
+    isStuck() {
+        if (this.x === this.previousPosition.x && this.y === this.previousPosition.y) {
+            this.stuckCounter++;
+        } else {
+            this.stuckCounter = 0;
+            this.previousPosition = { x: this.x, y: this.y };
+        }
+        // Consider the gatherer stuck if it hasn't moved for 30 updates
+        return this.stuckCounter > 30;
     }
 }
+
+
 
 // A* Algorithmus-Implementierung
 function astar(grid, start, end, tilesX, tilesY) {
