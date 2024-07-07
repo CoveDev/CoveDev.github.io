@@ -17,8 +17,8 @@ class Game {
     }
 
     resizeCanvas() {
-        this.canvas.width = window.innerWidth/4;
-        this.canvas.height = window.innerHeight/4;
+        this.canvas.width = window.innerWidth / 4;
+        this.canvas.height = window.innerHeight / 4;
         this.camera.resize(this.canvas.width, this.canvas.height);
     }
 
@@ -84,31 +84,37 @@ class Player {
         this.y = 0;
         this.tileSize = tileSize;
         this.speed = 2;
-        this.image = new Image();
-        this.image.src = 'player.png';  // Pfad zum Spieler-Bild
+        this.animations = {
+            idle: new Animation('player_animations.png', 4, tileSize, tileSize, 200, 0),
+            walk: new Animation('player_animations.png', 8, tileSize, tileSize, 100, 1)
+            // Weitere Animationen hier hinzufügen
+        };
+        this.currentAnimation = this.animations.idle;
         this.keys = { w: false, a: false, s: false, d: false };
     }
 
     draw(context, camera) {
-        context.drawImage(this.image, this.x - camera.x, this.y - camera.y, this.tileSize, this.tileSize);
+        this.currentAnimation.draw(context, this.x - camera.x, this.y - camera.y);
     }
 
     handleKeyDown(event) {
         if (event.key in this.keys) {
             this.keys[event.key] = true;
         }
+        this.updateAnimation();
     }
 
     handleKeyUp(event) {
         if (event.key in this.keys) {
             this.keys[event.key] = false;
         }
+        this.updateAnimation();
     }
 
     update(tiles, tilesX, tilesY) {
         let newX = this.x;
         let newY = this.y;
-        
+
         if (this.keys['w']) newY -= this.speed;
         if (this.keys['a']) newX -= this.speed;
         if (this.keys['s']) newY += this.speed;
@@ -120,6 +126,16 @@ class Player {
 
         if (this.canMoveTo(this.x, newY, tiles, tilesX, tilesY)) {
             this.y = newY;
+        }
+
+        this.currentAnimation.update();
+    }
+
+    updateAnimation() {
+        if (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d']) {
+            this.currentAnimation = this.animations.walk;
+        } else {
+            this.currentAnimation = this.animations.idle;
         }
     }
 
@@ -170,8 +186,45 @@ class Camera {
         this.x = Math.max(0, Math.min(this.x, this.worldWidth - this.viewportWidth));
         this.y = Math.max(0, Math.min(this.y, this.worldHeight - this.viewportHeight));
 
+        // Runde die x- und y-Position der Kamera auf die nächste Ganzzahl
         this.x = Math.floor(this.x);
         this.y = Math.floor(this.y);
+    }
+}
+
+class Animation {
+    constructor(imageSrc, frameCount, frameWidth, frameHeight, frameDuration, columnOffset) {
+        this.image = new Image();
+        this.image.src = imageSrc;
+        this.frameCount = frameCount;
+        this.frameWidth = frameWidth;
+        this.frameHeight = frameHeight;
+        this.frameDuration = frameDuration;
+        this.columnOffset = columnOffset;
+        this.currentFrame = 0;
+        this.elapsedTime = 0;
+    }
+
+    update() {
+        this.elapsedTime += 1000 / 60;  // Assuming 60 FPS
+        if (this.elapsedTime >= this.frameDuration) {
+            this.elapsedTime = 0;
+            this.currentFrame = (this.currentFrame + 1) % this.frameCount;
+        }
+    }
+
+    draw(context, x, y) {
+        context.drawImage(
+            this.image,
+            this.currentFrame * this.frameWidth,
+            this.columnOffset * this.frameHeight,
+            this.frameWidth,
+            this.frameHeight,
+            x,
+            y,
+            this.frameWidth,
+            this.frameHeight
+        );
     }
 }
 
