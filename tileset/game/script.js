@@ -83,10 +83,23 @@ class Player {
         this.x = 0;
         this.y = 0;
         this.tileSize = tileSize;
-        this.speed = 2;
+        this.speed = 1.5;
+        this.offsetX = -8;  // Beispieloffset für die x-Position
+        this.offsetY = -16; // Beispieloffset für die y-Position (größer als die Hitbox)
+        this.direction = 'unten'; // Initiale Richtung des Charakters
+        this.directions = {
+            'oben': 5,
+            'oben rechts': 6,
+            'rechts': 7,
+            'unten rechts': 0,
+            'unten': 1,
+            'unten links': 2,
+            'links': 3,
+            'oben links': 4
+        };
         this.animations = {
-            idle: new Animation('player_animations.png', 4, tileSize, tileSize, 200, 0),
-            walk: new Animation('player_animations.png', 8, tileSize, tileSize, 100, 1)
+            idle: new Animation('player_animations.png', 4, 44, 44, 200, 5),
+            walk: new Animation('player_animations.png', 4, 44, 44, 90, 0)
             // Weitere Animationen hier hinzufügen
         };
         this.currentAnimation = this.animations.idle;
@@ -94,7 +107,7 @@ class Player {
     }
 
     draw(context, camera) {
-        this.currentAnimation.draw(context, this.x - camera.x, this.y - camera.y);
+        this.currentAnimation.draw(context, this.x - camera.x + this.offsetX, this.y - camera.y + this.offsetY, this.directions[this.direction]);
     }
 
     handleKeyDown(event) {
@@ -115,10 +128,35 @@ class Player {
         let newX = this.x;
         let newY = this.y;
 
-        if (this.keys['w']) newY -= this.speed;
-        if (this.keys['a']) newX -= this.speed;
-        if (this.keys['s']) newY += this.speed;
-        if (this.keys['d']) newX += this.speed;
+        if (this.keys['w']) {
+            newY -= this.speed;
+            this.direction = 'oben';
+        }
+        if (this.keys['a']) {
+            newX -= this.speed;
+            this.direction = 'links';
+        }
+        if (this.keys['s']) {
+            newY += this.speed;
+            this.direction = 'unten';
+        }
+        if (this.keys['d']) {
+            newX += this.speed;
+            this.direction = 'rechts';
+        }
+
+        if (this.keys['w'] && this.keys['d']) {
+            this.direction = 'oben rechts';
+        }
+        if (this.keys['w'] && this.keys['a']) {
+            this.direction = 'oben links';
+        }
+        if (this.keys['s'] && this.keys['d']) {
+            this.direction = 'unten rechts';
+        }
+        if (this.keys['s'] && this.keys['a']) {
+            this.direction = 'unten links';
+        }
 
         if (this.canMoveTo(newX, this.y, tiles, tilesX, tilesY)) {
             this.x = newX;
@@ -193,7 +231,7 @@ class Camera {
 }
 
 class Animation {
-    constructor(imageSrc, frameCount, frameWidth, frameHeight, frameDuration, columnOffset) {
+    constructor(imageSrc, frameCount, frameWidth, frameHeight, frameDuration, columnOffset = 0) {
         this.image = new Image();
         this.image.src = imageSrc;
         this.frameCount = frameCount;
@@ -213,15 +251,15 @@ class Animation {
         }
     }
 
-    draw(context, x, y) {
+    draw(context, x, y, direction) {
         context.drawImage(
             this.image,
-            this.currentFrame * this.frameWidth,
-            this.columnOffset * this.frameHeight,
+            this.currentFrame * this.frameWidth + this.columnOffset * this.frameWidth,
+            direction * this.frameHeight,
             this.frameWidth,
             this.frameHeight,
-            x,
-            y,
+            Math.floor(x),
+            Math.floor(y),
             this.frameWidth,
             this.frameHeight
         );
