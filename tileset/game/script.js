@@ -61,9 +61,8 @@ class Game {
         console.log(`Mouse: ${worldX}, ${worldY}`);
 
         if (this.selectedGatherer) {
-            this.selectedGatherer.setWaypoint(worldX, worldY);
+            this.selectedGatherer.setWaypoint(worldX, worldY, this.tiles, this.tilesX, this.tilesY);
         } else {
-            console.log(this.allies[0].x, this.allies[0].y)
             this.allies.forEach(ally => {
                 if (this.isInsideHitbox(worldX, worldY, ally)) {
                     this.selectedGatherer = ally;
@@ -402,16 +401,16 @@ class Gatherer extends Character {
         this.currentAnimation.update();
     }
 
-    setWaypoint(worldX, worldY) {
+    setWaypoint(worldX, worldY, tiles, tilesX, tilesY) {
         const start = { x: Math.floor(this.x / this.tileSize), y: Math.floor(this.y / this.tileSize) };
         const end = { x: Math.floor(worldX / this.tileSize), y: Math.floor(worldY / this.tileSize) };
-        this.path = astar(this.tiles, start, end);
+        this.path = astar(tiles, start, end, tilesX, tilesY);
         this.pathIndex = 0;
     }
 }
 
 // A* Algorithmus-Implementierung
-function astar(grid, start, end) {
+function astar(grid, start, end, tilesX, tilesY) {
     const openSet = [];
     const closedSet = [];
     const cameFrom = {};
@@ -432,8 +431,9 @@ function astar(grid, start, end) {
         openSet.splice(openSet.indexOf(current), 1);
         closedSet.push(current);
 
-        getNeighbors(current).forEach(neighbor => {
+        getNeighbors(current, tilesX, tilesY).forEach(neighbor => {
             if (closedSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) return;
+            if (grid[neighbor.y][neighbor.x] === 1) return; // Blockierte Kachel
 
             const tentativeGScore = gScore[`${current.x},${current.y}`] + 1;
 
@@ -465,14 +465,14 @@ function reconstructPath(cameFrom, current) {
     return totalPath;
 }
 
-function getNeighbors(node) {
+function getNeighbors(node, tilesX, tilesY) {
     const neighbors = [
         { x: node.x - 1, y: node.y },
         { x: node.x + 1, y: node.y },
         { x: node.x, y: node.y - 1 },
         { x: node.x, y: node.y + 1 }
     ];
-    return neighbors.filter(n => n.x >= 0 && n.y >= 0);
+    return neighbors.filter(n => n.x >= 0 && n.y >= 0 && n.x < tilesX && n.y < tilesY);
 }
 
 class Camera {
