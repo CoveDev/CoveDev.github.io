@@ -168,17 +168,25 @@ class Character {
     updateDirection(dx, dy) {
         if (dx === 0 && dy === 0) return;
 
-        if (dy < 0) {
-            if (dx < 0) this.direction = 'oben links';
-            else if (dx > 0) this.direction = 'oben rechts';
-            else this.direction = 'oben';
-        } else if (dy > 0) {
-            if (dx < 0) this.direction = 'unten links';
-            else if (dx > 0) this.direction = 'unten rechts';
-            else this.direction = 'unten';
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        if (absDx > 0.5 * this.speed && absDy > 0.5 * this.speed) {
+            if (dy < 0) {
+                if (dx < 0) this.direction = 'oben links';
+                else if (dx > 0) this.direction = 'oben rechts';
+            } else if (dy > 0) {
+                if (dx < 0) this.direction = 'unten links';
+                else if (dx > 0) this.direction = 'unten rechts';
+            }
         } else {
-            if (dx < 0) this.direction = 'links';
-            else if (dx > 0) this.direction = 'rechts';
+            if (absDx > absDy) {
+                if (dx < 0) this.direction = 'links';
+                else if (dx > 0) this.direction = 'rechts';
+            } else {
+                if (dy < 0) this.direction = 'oben';
+                else if (dy > 0) this.direction = 'unten';
+            }
         }
     }
 }
@@ -230,44 +238,31 @@ class Player extends Character {
         let newX = this.x;
         let newY = this.y;
 
+        let dx = 0;
+        let dy = 0;
+
         if (this.keys['w']) {
-            newY -= this.speed;
-            this.direction = 'oben';
+            dy -= this.speed;
         }
         if (this.keys['a']) {
-            newX -= this.speed;
-            this.direction = 'links';
+            dx -= this.speed;
         }
         if (this.keys['s']) {
-            newY += this.speed;
-            this.direction = 'unten';
+            dy += this.speed;
         }
         if (this.keys['d']) {
-            newX += this.speed;
-            this.direction = 'rechts';
+            dx += this.speed;
         }
 
-        if (this.keys['w'] && this.keys['d']) {
-            this.direction = 'oben rechts';
-        }
-        if (this.keys['w'] && this.keys['a']) {
-            this.direction = 'oben links';
-        }
-        if (this.keys['s'] && this.keys['d']) {
-            this.direction = 'unten rechts';
-        }
-        if (this.keys['s'] && this.keys['a']) {
-            this.direction = 'unten links';
+        if (this.canMoveTo(this.x + dx, this.y, tiles, tilesX, tilesY)) {
+            this.x += dx;
         }
 
-        if (this.canMoveTo(newX, this.y, tiles, tilesX, tilesY)) {
-            this.x = newX;
+        if (this.canMoveTo(this.x, this.y + dy, tiles, tilesX, tilesY)) {
+            this.y += dy;
         }
 
-        if (this.canMoveTo(this.x, newY, tiles, tilesX, tilesY)) {
-            this.y = newY;
-        }
-
+        this.updateDirection(dx, dy);
         this.currentAnimation.update();
     }
 
@@ -408,8 +403,7 @@ class Gatherer extends Character {
                     this.currentAnimation = this.animations.idle;
                 }
             }
-        }
-        else{
+        } else {
             this.currentAnimation = this.animations.idle;
         }
 
@@ -435,8 +429,6 @@ class Gatherer extends Character {
         return this.stuckCounter > 30;
     }
 }
-
-
 
 // A* Algorithmus-Implementierung
 function astar(grid, start, end, tilesX, tilesY) {
