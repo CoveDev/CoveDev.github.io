@@ -11,12 +11,13 @@ class Game {
             new Gatherer(this.tileSize, 200, 200),
             new Gatherer(this.tileSize, 250, 250) // Zweiter Gatherer
         ];
+        this.projectiles = []; // Liste der Projektile
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
         this.generatePerlinWorld(50, 50);  // Generiere eine 50x50 Perlin Noise Welt
         this.camera = new Camera(this.canvas.width, this.canvas.height, this.tilesX * this.tileSize, this.tilesY * this.tileSize);
-        this.debug = true;  // Debug-Variable zum Anzeigen der Hitboxen
+        this.debug = 0;  // Debug-Variable zum Anzeigen der Hitboxen
         this.selectedGatherer = null;  // Der ausgewählte Gatherer
         this.initEvents();
         this.resizeCanvas();
@@ -175,13 +176,32 @@ class Game {
             this.enemies.forEach(enemy => enemy.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.allies.forEach(ally => ally.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.checkCollisions();
+            this.updateProjectiles();
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
             this.player.draw(this.context, this.camera, this.debug);
             this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug));
             this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
+            this.drawProjectiles();
         }
         window.requestAnimationFrame(() => this.gameLoop());
+    }
+
+    updateProjectiles() {
+        this.projectiles.forEach(projectile => {
+            projectile.update();
+            this.enemies.forEach(enemy => {
+                if (projectile.checkCollision(enemy)) {
+                    enemy.takeDamage(projectile.atk);
+                    projectile.active = false;
+                }
+            });
+        });
+        this.projectiles = this.projectiles.filter(projectile => projectile.active);
+    }
+
+    drawProjectiles() {
+        this.projectiles.forEach(projectile => projectile.draw(this.context, this.camera));
     }
 
     drawTiles() {
@@ -207,7 +227,7 @@ class Game {
 }
 
 class Character {
-    constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations) {
+    constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations, atk, hp) {
         this.tileSize = tileSize;
         this.x = x;
         this.y = y;
@@ -219,6 +239,8 @@ class Character {
         this.directions = directions;
         this.animations = animations;
         this.currentAnimation = this.animations.idle;
+        this.atk = atk;  // Angriffskraft
+        this.hp = hp;    // Gesundheitspunkte
     }
 
     draw(context, camera, debug) {
@@ -250,6 +272,23 @@ class Character {
             }
         }
         return true;
+    }
+
+    shootProjectile(projectiles, targetX, targetY) {
+        const projectile = new Projectile(this.x, this.y, targetX, targetY, this.atk);
+        projectiles.push(projectile);
+    }
+
+    takeDamage(damage) {
+        this.hp -= damage;
+        if (this.hp <= 0) {
+            this.hp = 0;
+            this.die();
+        }
+    }
+
+    die() {
+        // Implement character death logic
     }
 
     updateDirection(dx, dy) {
@@ -302,7 +341,9 @@ class Player extends Character {
             {
                 idle: new Animation('player_animations.png', 4, 44, 44, 200, 5),
                 walk: new Animation('player_animations.png', 4, 44, 44, 100, 0)
-            }
+            },
+            10,  // ATK
+            100  // HP
         );
         this.keys = { w: false, a: false, s: false, d: false };
     }
@@ -310,6 +351,11 @@ class Player extends Character {
     handleKeyDown(event) {
         if (event.key in this.keys) {
             this.keys[event.key] = true;
+        }
+        if (event.key === ' ') {  // Leertaste für Schießen
+            const targetX = this.x + this.tileSize * this.directions[this.direction].x;
+            const targetY = this.y + this.tileSize * this.directions[this.direction].y;
+            this.shootProjectile(game.projectiles, targetX, targetY);
         }
         this.updateAnimation();
     }
@@ -386,7 +432,9 @@ class Slime extends Character {
             {
                 idle: new Animation('slime_animations.png', 4, 44, 44, 200, 5),
                 move: new Animation('slime_animations.png', 4, 44, 44, 100, 0)
-            }
+            },
+            5,  // ATK
+            30  // HP
         );
     }
 
@@ -442,7 +490,9 @@ class Gatherer extends Character {
             {
                 idle: new Animation('gatherer_animations.png', 4, 44, 44, 200, 5),
                 walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0)
-            }
+            },
+            8,   // ATK
+            50   // HP
         );
         this.path = [];
         this.pathIndex = 0;
@@ -514,6 +564,53 @@ class Gatherer extends Character {
         }
         // Consider the gatherer stuck if it hasn't moved for 30 updates
         return this.stuckCounter > 30;
+    }
+}
+
+class Projectile {
+    constructor(x, y, targetX, targetY, atk) {
+        this.x = x;
+        this.y = y;
+        this.targetX = targetX;
+        this.targetY = targetY;
+        this.atk = atk;
+        this.speed = 5;  // Geschwindigkeit des Projektils
+        const dx = targetX - x;
+        const dy = targetY - y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        this.velocityX = (dx / distance) * this.speed;
+        this.velocityY = (dy / distance) * this.speed;
+        this.active = true;  // Projektile sind aktiv, solange sie sich bewegen
+    }
+
+    update() {
+        if (!this.active) return;
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        // Deaktiviere das Projektil, wenn es das Ziel erreicht
+        if (Math.abs(this.x - this.targetX) < this.speed && Math.abs(this.y - this.targetY) < this.speed) {
+            this.active = false;
+        }
+    }
+
+    draw(context, camera) {
+        if (!this.active) return;
+        context.fillStyle = 'red';
+        context.beginPath();
+        context.arc(this.x - camera.x, this.y - camera.y, 3, 0, Math.PI * 2);
+        context.fill();
+    }
+
+    checkCollision(character) {
+        if (!this.active) return false;
+        const hitboxX = character.x + (character.tileSize - character.hitbox.width) / 2;
+        const hitboxY = character.y + (character.tileSize - character.hitbox.height) / 2;
+        return (
+            this.x >= hitboxX &&
+            this.x <= hitboxX + character.hitbox.width &&
+            this.y >= hitboxY &&
+            this.y <= hitboxY + character.hitbox.height
+        );
     }
 }
 
