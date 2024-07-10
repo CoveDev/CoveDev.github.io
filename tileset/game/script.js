@@ -331,8 +331,9 @@ class Character {
         }
         const drawX = Math.floor(this.x - camera.x + this.offsetX);
         const drawY = Math.floor(this.y - camera.y + this.offsetY);
+        context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
         
-        if (this.blinking) {
+        if (this.blinkDuration > 0) {
             this.blinkDuration--;
             if (this.blinkDuration % 10 < 5) {
                 context.globalCompositeOperation = 'lighter'; // Heller Effekt
@@ -390,7 +391,7 @@ class Character {
         if (!this.alive) return;
         this.hp -= damage;
         this.startBlinking();
-        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 10, 1, 30, 'particle_image.png', 4, 16, 16, 100); // Add hit particles
+        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 10, 1, 30, 'particle_image.png', 4, 32, 32, 100); // Add hit particles
         if (this.hp <= 0) {
             this.hp = 0;
             this.die();
@@ -405,7 +406,7 @@ class Character {
     playDeathAnimation() {
         // Implement death animation logic here
         this.deathAnimationPlayed = true;
-        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 20, 1.5, 60, 'death_particle_image.png', 4, 16, 16, 100); // Add death particles
+        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 20, 1.5, 60, 'death_particle_image.png', 4, 32, 32, 100); // Add death particles
         if (this.deleteOnDeath) {
             game.removeCharacter(this);
         }
@@ -531,9 +532,9 @@ class Player extends Character {
 
         // Check if the act animation is playing and it's the correct frame to shoot
         if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
-            const targetX = this.x + this.lookVector.x * this.tileSize;
-            const targetY = this.y + this.lookVector.y * this.tileSize;
-            this.shootProjectile(game.projectiles, targetX, targetY, 100, 0, 0);
+            const targetX = this.x + this.lookVector.x * this.tileSize * 10;
+            const targetY = this.y + this.lookVector.y * this.tileSize * 10;
+            this.shootProjectile(game.projectiles, targetX, targetY, 1000, 0, 0);
         }
 
         // Reset shooting flag after the act animation is done
@@ -614,7 +615,7 @@ class Slime extends Character {
         }
 
         if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
-            this.shootProjectile(game.projectiles, player.x, player.y, 100, 0, 0); // Projektil senden
+            this.shootProjectile(game.projectiles, player.x, player.y, 1000, 0, 0); // Projektil senden
         }
 
         this.currentAnimation.update();
@@ -703,7 +704,7 @@ class Gatherer extends Character {
         }
 
         if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
-            this.shootProjectile(game.projectiles, player.x, player.y, 100, 0, 0); // Projektil senden
+            this.shootProjectile(game.projectiles, player.x, player.y, 1000, 0, 0); // Projektil senden
         }
 
         this.currentAnimation.update();
@@ -786,8 +787,8 @@ class Projectile {
 
 class Particle {
     constructor(x, y, velocityX, velocityY, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration) {
-        this.x = x;
-        this.y = y;
+        this.x = x - frameWidth/2;
+        this.y = y - frameHeight/2;
         this.velocityX = velocityX;
         this.velocityY = velocityY;
         this.duration = duration;
