@@ -411,23 +411,25 @@ class Player extends Character {
             },
             {
                 idle: new Animation('player_animations.png', 4, 44, 44, 200, 5),
-                walk: new Animation('player_animations.png', 4, 44, 44, 100, 0)
+                walk: new Animation('player_animations.png', 4, 44, 44, 100, 0),
+                act: new Animation('player_animations.png', 4, 44, 44, 100, 10) // act Animation hinzufügen
             },
             10,  // ATK
             100, // HP
             false // Player should not be deleted on death
         );
         this.keys = { w: false, a: false, s: false, d: false };
+        this.shooting = false; // Flag to check if the player is shooting
     }
 
     handleKeyDown(event) {
         if (event.key in this.keys) {
             this.keys[event.key] = true;
         }
-        if (event.key === ' ') {  // Leertaste für Schießen
-            const targetX = this.x + this.lookVector.x * this.tileSize;
-            const targetY = this.y + this.lookVector.y * this.tileSize;
-            this.shootProjectile(game.projectiles, targetX, targetY);
+        if (event.key === ' ' && !this.shooting) {  // Leertaste für Schießen
+            this.shooting = true;
+            this.currentAnimation = this.animations.act; // Set the act animation
+            this.currentAnimation.currentFrame = 0; // Start from the first frame
         }
         this.updateAnimation();
     }
@@ -469,11 +471,26 @@ class Player extends Character {
         }
 
         this.updateDirection(dx, dy);
+
+        // Check if the act animation is playing and it's the correct frame to shoot
+        if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
+            const targetX = this.x + this.lookVector.x * this.tileSize;
+            const targetY = this.y + this.lookVector.y * this.tileSize;
+            this.shootProjectile(game.projectiles, targetX, targetY, 100, 0, 0);
+        }
+
+        // Reset shooting flag after the act animation is done
+        if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === this.currentAnimation.frameCount - 1) {
+            this.shooting = false;
+        }
+
         this.currentAnimation.update();
     }
 
     updateAnimation() {
-        if (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d']) {
+        if (this.shooting) {
+            this.currentAnimation = this.animations.act;
+        } else if (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d']) {
             this.currentAnimation = this.animations.walk;
         } else {
             this.currentAnimation = this.animations.idle;
@@ -504,7 +521,8 @@ class Slime extends Character {
             },
             {
                 idle: new Animation('slime_animations.png', 4, 44, 44, 200, 5),
-                move: new Animation('slime_animations.png', 4, 44, 44, 100, 0)
+                move: new Animation('slime_animations.png', 4, 44, 44, 100, 0),
+                act: new Animation('slime_animations.png', 4, 44, 44, 100, 10) // act Animation hinzufügen
             },
             5,  // ATK
             30, // HP
@@ -537,6 +555,11 @@ class Slime extends Character {
         } else {
             this.currentAnimation = this.animations.idle;
         }
+
+        if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
+            this.shootProjectile(game.projectiles, player.x, player.y, 100, 0, 0); // Projektil senden
+        }
+
         this.currentAnimation.update();
     }
 }
@@ -564,7 +587,8 @@ class Gatherer extends Character {
             },
             {
                 idle: new Animation('gatherer_animations.png', 4, 44, 44, 200, 5),
-                walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0)
+                walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0),
+                act: new Animation('gatherer_animations.png', 4, 44, 44, 100, 10) // act Animation hinzufügen
             },
             8,  // ATK
             50, // HP
@@ -621,6 +645,10 @@ class Gatherer extends Character {
             this.currentAnimation = this.animations.idle;
         }
 
+        if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
+            this.shootProjectile(game.projectiles, player.x, player.y, 100, 0, 0); // Projektil senden
+        }
+
         this.currentAnimation.update();
     }
 
@@ -645,7 +673,7 @@ class Gatherer extends Character {
 }
 
 class Projectile {
-    constructor(x, y, targetX, targetY, atk, sender) {
+    constructor(x, y, targetX, targetY, atk, sender, duration) {
         this.x = x;
         this.y = y;
         this.targetX = targetX;
@@ -653,6 +681,7 @@ class Projectile {
         this.atk = atk;
         this.sender = sender; // Sender hinzufügen
         this.speed = 5;  // Geschwindigkeit des Projektils
+        this.duration = duration; // Dauer des Projektils
         const dx = targetX - x;
         const dy = targetY - y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -665,6 +694,10 @@ class Projectile {
         if (!this.active) return;
         this.x += this.velocityX;
         this.y += this.velocityY;
+        this.duration--;
+        if (this.duration <= 0) {
+            this.active = false;
+        }
         // Deaktiviere das Projektil, wenn es das Ziel erreicht
         if (Math.abs(this.x - this.targetX) < this.speed && Math.abs(this.y - this.targetY) < this.speed) {
             this.active = false;
