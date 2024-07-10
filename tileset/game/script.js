@@ -380,6 +380,10 @@ class Character {
 
         const centerX = this.x + (this.tileSize - this.hitbox.width) / 2 + this.hitbox.width / 2 + offsetX;
         const centerY = this.y + (this.tileSize - this.hitbox.height) / 2 + this.hitbox.height / 2 + offsetY;
+
+        targetX += (this.tileSize - this.hitbox.width) / 2 + this.hitbox.width / 2 + offsetX;
+        targetY += (this.tileSize - this.hitbox.height) / 2 + this.hitbox.height / 2 + offsetY;
+
         const projectile = new Projectile(centerX, centerY, targetX, targetY, this.atk, this, duration);
         projectiles.push(projectile);
 
@@ -470,7 +474,7 @@ class Player extends Character {
             {
                 idle: new Animation('player_animations.png', 4, 44, 44, 200, 5),
                 walk: new Animation('player_animations.png', 4, 44, 44, 100, 0),
-                act: new Animation('player_animations.png', 4, 44, 44, 100, 10) // act Animation hinzufügen
+                act: new Animation('player_animations.png', 8, 44, 44, 50, 10) // act Animation hinzufügen
             },
             10,  // ATK
             100, // HP
@@ -485,9 +489,12 @@ class Player extends Character {
             this.keys[event.key] = true;
         }
         if (event.key === ' ' && !this.shooting) {  // Leertaste für Schießen
-            this.shooting = true;
-            this.currentAnimation = this.animations.act; // Set the act animation
-            this.currentAnimation.currentFrame = 0; // Start from the first frame
+            const currentTime = new Date().getTime();
+            if (currentTime - this.lastShootTime >= this.shootCooldown) {
+                this.shooting = true;
+                this.currentAnimation = this.animations.act; // Set the act animation
+                this.currentAnimation.currentFrame = 0; // Start from the first frame
+            }
         }
         this.updateAnimation();
     }
@@ -531,30 +538,34 @@ class Player extends Character {
         this.updateDirection(dx, dy);
 
         // Check if the act animation is playing and it's the correct frame to shoot
-        if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
+        if (this.shooting && this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 5) {
             const targetX = this.x + this.lookVector.x * this.tileSize * 10;
             const targetY = this.y + this.lookVector.y * this.tileSize * 10;
             this.shootProjectile(game.projectiles, targetX, targetY, 1000, 0, 0);
+            this.lastShootTime = new Date().getTime(); // Update the last shoot time
         }
 
-        // Reset shooting flag after the act animation is done
-        if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === this.currentAnimation.frameCount - 1) {
+        // Reset shooting flag and animation after the act animation is done
+        if (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d'] || this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === this.currentAnimation.frameCount - 1) {
             this.shooting = false;
+            this.updateAnimation(); // Switch back to the appropriate animation
         }
 
         this.currentAnimation.update();
     }
 
     updateAnimation() {
-        if (this.shooting) {
-            this.currentAnimation = this.animations.act;
-        } else if (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d']) {
+        if (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d']) {
             this.currentAnimation = this.animations.walk;
+        } else if (this.shooting) {
+            this.currentAnimation = this.animations.act;
         } else {
             this.currentAnimation = this.animations.idle;
         }
     }
 }
+
+
 
 class Slime extends Character {
     constructor(tileSize, x, y) {
@@ -580,7 +591,7 @@ class Slime extends Character {
             {
                 idle: new Animation('slime_animations.png', 4, 44, 44, 200, 5),
                 move: new Animation('slime_animations.png', 4, 44, 44, 100, 0),
-                act: new Animation('slime_animations.png', 4, 44, 44, 100, 10) // act Animation hinzufügen
+                act: new Animation('slime_animations.png', 8, 44, 44, 100, 10) // act Animation hinzufügen
             },
             5,  // ATK
             30, // HP
@@ -646,7 +657,7 @@ class Gatherer extends Character {
             {
                 idle: new Animation('gatherer_animations.png', 4, 44, 44, 200, 5),
                 walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0),
-                act: new Animation('gatherer_animations.png', 4, 44, 44, 100, 10) // act Animation hinzufügen
+                act: new Animation('gatherer_animations.png', 8, 44, 44, 100, 10) // act Animation hinzufügen
             },
             8,  // ATK
             50, // HP
