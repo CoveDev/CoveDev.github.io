@@ -17,7 +17,7 @@ class Game {
         this.noise = new SimplexNoise(seed);
         this.generatePerlinWorld(50, 50);  // Generiere eine 50x50 Perlin Noise Welt
         this.camera = new Camera(this.canvas.width, this.canvas.height, this.tilesX * this.tileSize, this.tilesY * this.tileSize);
-        this.debug = 0;  // Debug-Variable zum Anzeigen der Hitboxen
+        this.debug = 1;  // Debug-Variable zum Anzeigen der Hitboxen
         this.selectedGatherer = null;  // Der ausgewählte Gatherer
         this.initEvents();
         this.resizeCanvas();
@@ -241,6 +241,7 @@ class Character {
         this.currentAnimation = this.animations.idle;
         this.atk = atk;  // Angriffskraft
         this.hp = hp;    // Gesundheitspunkte
+        this.lookVector = { x: 0, y: 1 }; // Blickvektor initialisiert auf unten
     }
 
     draw(context, camera, debug) {
@@ -275,7 +276,7 @@ class Character {
     }
 
     shootProjectile(projectiles, targetX, targetY) {
-        const projectile = new Projectile(this.x, this.y, targetX, targetY, this.atk);
+        const projectile = new Projectile(this.x, this.y, targetX, targetY, this.atk, this);
         projectiles.push(projectile);
     }
 
@@ -296,6 +297,8 @@ class Character {
 
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
+
+        this.lookVector = { x: dx, y: dy };
 
         if (absDx > 0.5 * this.speed && absDy > 0.5 * this.speed) {
             if (dy < 0) {
@@ -353,8 +356,8 @@ class Player extends Character {
             this.keys[event.key] = true;
         }
         if (event.key === ' ') {  // Leertaste für Schießen
-            const targetX = this.x + this.tileSize * this.directions[this.direction].x;
-            const targetY = this.y + this.tileSize * this.directions[this.direction].y;
+            const targetX = this.x + this.lookVector.x * this.tileSize;
+            const targetY = this.y + this.lookVector.y * this.tileSize;
             this.shootProjectile(game.projectiles, targetX, targetY);
         }
         this.updateAnimation();
@@ -568,12 +571,13 @@ class Gatherer extends Character {
 }
 
 class Projectile {
-    constructor(x, y, targetX, targetY, atk) {
+    constructor(x, y, targetX, targetY, atk, sender) {
         this.x = x;
         this.y = y;
         this.targetX = targetX;
         this.targetY = targetY;
         this.atk = atk;
+        this.sender = sender; // Sender hinzufügen
         this.speed = 5;  // Geschwindigkeit des Projektils
         const dx = targetX - x;
         const dy = targetY - y;
@@ -603,6 +607,8 @@ class Projectile {
 
     checkCollision(character) {
         if (!this.active) return false;
+        if (character === this.sender) return false;  // Sender ignorieren
+
         const hitboxX = character.x + (character.tileSize - character.hitbox.width) / 2;
         const hitboxY = character.y + (character.tileSize - character.hitbox.height) / 2;
         return (
@@ -612,72 +618,6 @@ class Projectile {
             this.y <= hitboxY + character.hitbox.height
         );
     }
-}
-
-// A* Algorithmus-Implementierung
-function astar(grid, start, end, tilesX, tilesY) {
-    const openSet = [];
-    const closedSet = [];
-    const cameFrom = {};
-    const gScore = {};
-    const fScore = {};
-
-    openSet.push(start);
-    gScore[`${start.x},${start.y}`] = 0;
-    fScore[`${start.x},${start.y}`] = heuristic(start, end);
-
-    while (openSet.length > 0) {
-        let current = openSet.reduce((acc, node) => (fScore[`${node.x},${node.y}`] < fScore[`${acc.x},${acc.y}`] ? node : acc), openSet[0]);
-
-        if (current.x === end.x && current.y === end.y) {
-            return reconstructPath(cameFrom, current);
-        }
-
-        openSet.splice(openSet.indexOf(current), 1);
-        closedSet.push(current);
-
-        getNeighbors(current, tilesX, tilesY).forEach(neighbor => {
-            if (closedSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) return;
-            if (grid[neighbor.y][neighbor.x] === 1) return; // Blockierte Kachel
-
-            const tentativeGScore = gScore[`${current.x},${current.y}`] + 1;
-
-            if (!openSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) {
-                openSet.push(neighbor);
-            } else if (tentativeGScore >= gScore[`${neighbor.x},${neighbor.y}`]) {
-                return;
-            }
-
-            cameFrom[`${neighbor.x},${neighbor.y}`] = current;
-            gScore[`${neighbor.x},${neighbor.y}`] = tentativeGScore;
-            fScore[`${neighbor.x},${neighbor.y}`] = gScore[`${neighbor.x},${neighbor.y}`] + heuristic(neighbor, end);
-        });
-    }
-
-    return [];
-}
-
-function heuristic(a, b) {
-    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-}
-
-function reconstructPath(cameFrom, current) {
-    const totalPath = [current];
-    while (`${current.x},${current.y}` in cameFrom) {
-        current = cameFrom[`${current.x},${current.y}`];
-        totalPath.unshift(current);
-    }
-    return totalPath;
-}
-
-function getNeighbors(node, tilesX, tilesY) {
-    const neighbors = [
-        { x: node.x - 1, y: node.y },
-        { x: node.x + 1, y: node.y },
-        { x: node.x, y: node.y - 1 },
-        { x: node.x, y: node.y + 1 }
-    ];
-    return neighbors.filter(n => n.x >= 0 && n.y >= 0 && n.x < tilesX && n.y < tilesY);
 }
 
 class Camera {
@@ -748,6 +688,72 @@ class Animation {
             this.frameHeight
         );
     }
+}
+
+// A* Algorithmus-Implementierung
+function astar(grid, start, end, tilesX, tilesY) {
+    const openSet = [];
+    const closedSet = [];
+    const cameFrom = {};
+    const gScore = {};
+    const fScore = {};
+
+    openSet.push(start);
+    gScore[`${start.x},${start.y}`] = 0;
+    fScore[`${start.x},${start.y}`] = heuristic(start, end);
+
+    while (openSet.length > 0) {
+        let current = openSet.reduce((acc, node) => (fScore[`${node.x},${node.y}`] < fScore[`${acc.x},${acc.y}`] ? node : acc), openSet[0]);
+
+        if (current.x === end.x && current.y === end.y) {
+            return reconstructPath(cameFrom, current);
+        }
+
+        openSet.splice(openSet.indexOf(current), 1);
+        closedSet.push(current);
+
+        getNeighbors(current, tilesX, tilesY).forEach(neighbor => {
+            if (closedSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) return;
+            if (grid[neighbor.y][neighbor.x] === 1) return; // Blockierte Kachel
+
+            const tentativeGScore = gScore[`${current.x},${current.y}`] + 1;
+
+            if (!openSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) {
+                openSet.push(neighbor);
+            } else if (tentativeGScore >= gScore[`${neighbor.x},${neighbor.y}`]) {
+                return;
+            }
+
+            cameFrom[`${neighbor.x},${neighbor.y}`] = current;
+            gScore[`${neighbor.x},${neighbor.y}`] = tentativeGScore;
+            fScore[`${neighbor.x},${neighbor.y}`] = gScore[`${neighbor.x},${neighbor.y}`] + heuristic(neighbor, end);
+        });
+    }
+
+    return [];
+}
+
+function heuristic(a, b) {
+    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+function reconstructPath(cameFrom, current) {
+    const totalPath = [current];
+    while (`${current.x},${current.y}` in cameFrom) {
+        current = cameFrom[`${current.x},${current.y}`];
+        totalPath.unshift(current);
+    }
+    return totalPath;
+}
+
+function getNeighbors(node, tilesX, tilesY) {
+    const neighbors = [
+        { x: node.x - 1, y: node.y },
+        { x: node.x + 1, y: node.y },
+        { x: node.x, y: node.y - 1 },
+        { x: node.x, y: node.y + 1 }
+    ];
+    return neighbors.filter(n => n.x >= 0 && n.y >= 0 && n.x < tilesX && n.y < tilesY);
 }
 
 class SimplexNoise {
