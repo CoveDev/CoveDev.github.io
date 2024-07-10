@@ -1,3 +1,4 @@
+// Main Game Class
 class Game {
     constructor(canvasId, seed) {
         this.canvas = document.getElementById(canvasId);
@@ -251,7 +252,52 @@ class Game {
             this.particles.push(particle);
         }
     }
+
+    addAnimatedParticles(x, y, numParticles, speed, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration) {
+        for (let i = 0; i < numParticles; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const velocityX = Math.cos(angle) * speed;
+            const velocityY = Math.sin(angle) * speed;
+            const particle = new Particle(x, y, velocityX, velocityY, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration);
+            this.particles.push(particle);
+        }
+    }
 }
+
+class Camera {
+    constructor(viewportWidth, viewportHeight, worldWidth, worldHeight) {
+        this.viewportWidth = viewportWidth;
+        this.viewportHeight = viewportHeight;
+        this.worldWidth = worldWidth;
+        this.worldHeight = worldHeight;
+        this.x = 0;
+        this.y = 0;
+    }
+
+    resize(viewportWidth, viewportHeight) {
+        this.viewportWidth = viewportWidth;
+        this.viewportHeight = viewportHeight;
+    }
+
+    update(targetX, targetY) {
+        const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
+
+        const targetXCenter = targetX - this.viewportWidth / 2;
+        const targetYCenter = targetY - this.viewportHeight / 2;
+
+        this.x = lerp(this.x, targetXCenter, 0.1);
+        this.y = lerp(this.y, targetYCenter, 0.1);
+
+        // Begrenze die Kamera auf die Weltgrenzen
+        this.x = Math.max(0, Math.min(this.x, this.worldWidth - this.viewportWidth));
+        this.y = Math.max(0, Math.min(this.y, this.worldHeight - this.viewportHeight));
+
+        // Runde die x- und y-Position der Kamera auf die nächste Ganzzahl
+        this.x = Math.floor(this.x);
+        this.y = Math.floor(this.y);
+    }
+}
+
 
 class Character {
     constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations, atk, hp, deleteOnDeath = false) {
@@ -274,6 +320,8 @@ class Character {
         this.blinking = false; // Status, ob der Charakter blinkt
         this.blinkDuration = 0; // Dauer des Blinkens
         this.deathAnimationPlayed = false; // Status, ob die Sterbeanimation abgespielt wurde
+        this.shootCooldown = 500;  // in Millisekunden, Beispielwert
+        this.lastShootTime = 0;
     }
 
     draw(context, camera, debug) {
@@ -286,7 +334,7 @@ class Character {
         
         if (this.blinking) {
             this.blinkDuration--;
-            if (this.blinkDuration % 10 < 3) {
+            if (this.blinkDuration % 10 < 5) {
                 context.globalCompositeOperation = 'lighter'; // Heller Effekt
             }
         }
@@ -324,17 +372,25 @@ class Character {
 
     shootProjectile(projectiles, targetX, targetY, duration, offsetX, offsetY) {
         if (!this.alive) return;
+        const currentTime = new Date().getTime();
+        if (currentTime - this.lastShootTime < this.shootCooldown) {
+            return;  // Cooldown noch nicht abgelaufen
+        }
+
         const centerX = this.x + (this.tileSize - this.hitbox.width) / 2 + this.hitbox.width / 2 + offsetX;
         const centerY = this.y + (this.tileSize - this.hitbox.height) / 2 + this.hitbox.height / 2 + offsetY;
         const projectile = new Projectile(centerX, centerY, targetX, targetY, this.atk, this, duration);
         projectiles.push(projectile);
+
+        // Setze die Zeit des letzten Schusses auf die aktuelle Zeit
+        this.lastShootTime = currentTime;
     }
 
     takeDamage(damage) {
         if (!this.alive) return;
         this.hp -= damage;
         this.startBlinking();
-        game.addParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 10, 1, 30, 'red'); // Add hit particles
+        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 10, 1, 30, 'particle_image.png', 4, 16, 16, 100); // Add hit particles
         if (this.hp <= 0) {
             this.hp = 0;
             this.die();
@@ -349,7 +405,7 @@ class Character {
     playDeathAnimation() {
         // Implement death animation logic here
         this.deathAnimationPlayed = true;
-        game.addParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 20, 1.5, 60, 'yellow'); // Add death particles
+        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 20, 1.5, 60, 'death_particle_image.png', 4, 16, 16, 100); // Add death particles
         if (this.deleteOnDeath) {
             game.removeCharacter(this);
         }
@@ -388,6 +444,7 @@ class Character {
     }
 }
 
+// Derived Classes from Character
 class Player extends Character {
     constructor(tileSize) {
         super(
@@ -728,14 +785,23 @@ class Projectile {
 }
 
 class Particle {
-    constructor(x, y, velocityX, velocityY, duration, color) {
+    constructor(x, y, velocityX, velocityY, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration) {
         this.x = x;
         this.y = y;
         this.velocityX = velocityX;
         this.velocityY = velocityY;
         this.duration = duration;
-        this.color = color;
         this.active = true;
+
+        this.image = new Image();
+        this.image.src = imageSrc;
+        this.frameCount = frameCount;
+        this.frameWidth = frameWidth;
+        this.frameHeight = frameHeight;
+        this.frameDuration = frameDuration;
+
+        this.currentFrame = 0;
+        this.elapsedTime = 0;
     }
 
     update() {
@@ -746,48 +812,23 @@ class Particle {
         if (this.duration <= 0) {
             this.active = false;
         }
+
+        this.elapsedTime += 1000 / 60;  // Assuming 60 FPS
+        if (this.elapsedTime >= this.frameDuration) {
+            this.elapsedTime = 0;
+            this.currentFrame = (this.currentFrame + 1) % this.frameCount;
+        }
     }
 
     draw(context, camera) {
         if (!this.active) return;
-        context.fillStyle = this.color;
-        context.beginPath();
-        context.arc(this.x - camera.x, this.y - camera.y, 2, 0, Math.PI * 2);
-        context.fill();
-    }
-}
-
-class Camera {
-    constructor(viewportWidth, viewportHeight, worldWidth, worldHeight) {
-        this.viewportWidth = viewportWidth;
-        this.viewportHeight = viewportHeight;
-        this.worldWidth = worldWidth;
-        this.worldHeight = worldHeight;
-        this.x = 0;
-        this.y = 0;
-    }
-
-    resize(viewportWidth, viewportHeight) {
-        this.viewportWidth = viewportWidth;
-        this.viewportHeight = viewportHeight;
-    }
-
-    update(targetX, targetY) {
-        const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
-
-        const targetXCenter = targetX - this.viewportWidth / 2;
-        const targetYCenter = targetY - this.viewportHeight / 2;
-
-        this.x = lerp(this.x, targetXCenter, 0.1);
-        this.y = lerp(this.y, targetYCenter, 0.1);
-
-        // Begrenze die Kamera auf die Weltgrenzen
-        this.x = Math.max(0, Math.min(this.x, this.worldWidth - this.viewportWidth));
-        this.y = Math.max(0, Math.min(this.y, this.worldHeight - this.viewportHeight));
-
-        // Runde die x- und y-Position der Kamera auf die nächste Ganzzahl
-        this.x = Math.floor(this.x);
-        this.y = Math.floor(this.y);
+        const frameX = this.currentFrame * this.frameWidth;
+        context.drawImage(
+            this.image,
+            frameX, 0, this.frameWidth, this.frameHeight,
+            this.x - camera.x, this.y - camera.y,
+            this.frameWidth, this.frameHeight
+        );
     }
 }
 
@@ -893,6 +934,7 @@ function getNeighbors(node, tilesX, tilesY) {
     return neighbors.filter(n => n.x >= 0 && n.y >= 0 && n.x < tilesX && n.y < tilesY);
 }
 
+// Utility Classes and Functions
 class SimplexNoise {
     constructor(seed) {
         this.perm = this.buildPermutationTable(seed);
@@ -982,6 +1024,7 @@ class SimplexNoise {
     }
 }
 
+// Initialization
 window.onload = () => {
     game = new Game('game', 282345);  // Seed für die Perlin-Noise-Generierung
 };
