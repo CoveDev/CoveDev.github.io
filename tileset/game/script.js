@@ -3,6 +3,8 @@ class Game {
     constructor(canvasId, seed) {
         this.canvas = document.getElementById(canvasId);
         this.context = this.canvas.getContext('2d');
+        this.fogCanvas = document.getElementById('fog');
+        this.fogContext = this.fogCanvas.getContext('2d');
         this.tileSize = 16;
         this.tilesetSize = 16;
         this.tiles = [];
@@ -29,6 +31,8 @@ class Game {
     resizeCanvas() {
         this.canvas.width = window.innerWidth / 4;
         this.canvas.height = window.innerHeight / 4;
+        this.fogCanvas.width = window.innerWidth / 4;
+        this.fogCanvas.height = window.innerHeight / 4;
         this.camera.resize(this.canvas.width, this.canvas.height);
     }
 
@@ -95,8 +99,6 @@ class Game {
 
         console.log(`Right Mouse: ${worldX}, ${worldY}`);
 
-        // Hier können Sie eine andere Aktion für den Rechtsklick implementieren
-        // Zum Beispiel: den ausgewählten Gatherer deselektieren
         if (this.selectedGatherer) {
             this.selectedGatherer = null; // Deselektiere den Gatherer
             console.log('Gatherer deselected');
@@ -158,13 +160,11 @@ class Game {
         const pushX = dx / distance * overlap / 2;
         const pushY = dy / distance * overlap / 2;
 
-        // Check if moving character1 will cause a collision with walls
         if (character1.canMoveTo(character1.x + pushX, character1.y + pushY, this.tiles, this.tilesX, this.tilesY)) {
             character1.x += pushX;
             character1.y += pushY;
         }
 
-        // Check if moving character2 will cause a collision with walls
         if (character2.canMoveTo(character2.x - pushX, character2.y - pushY, this.tiles, this.tilesX, this.tilesY)) {
             character2.x -= pushX;
             character2.y -= pushY;
@@ -173,20 +173,23 @@ class Game {
 
     gameLoop() {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.fogContext.clearRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
+        
         if (this.tiles.length > 0) {
             this.player.update(this.tiles, this.tilesX, this.tilesY);
             this.enemies.forEach(enemy => enemy.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.allies.forEach(ally => ally.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.checkCollisions();
             this.updateProjectiles();
-            this.updateParticles(); // Update particles
+            this.updateParticles();
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
             this.player.draw(this.context, this.camera, this.debug);
             this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug));
             this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
             this.drawProjectiles();
-            this.drawParticles(); // Draw particles
+            this.drawParticles();
+            this.drawFogOfWar();
         }
         window.requestAnimationFrame(() => this.gameLoop());
     }
@@ -236,6 +239,31 @@ class Game {
                 }
             }
         }
+    }
+
+    drawFogOfWar() {
+        this.fogContext.fillStyle = 'rgba(0, 0, 0, 0.8)'; // Fog of war color
+        this.fogContext.fillRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
+
+        this.clearFogAroundCharacter(this.player);
+
+        this.allies.forEach(ally => {
+            this.clearFogAroundCharacter(ally);
+        });
+
+        this.context.drawImage(this.fogCanvas, 0, 0);
+    }
+
+    clearFogAroundCharacter(character) {
+        const fogRadius = 50;
+        const centerX = character.x - this.camera.x + this.tileSize / 2;
+        const centerY = character.y - this.camera.y + this.tileSize / 2;
+
+        this.fogContext.globalCompositeOperation = 'destination-out';
+        this.fogContext.beginPath();
+        this.fogContext.arc(centerX, centerY, fogRadius, 0, Math.PI * 2, false);
+        this.fogContext.fill();
+        this.fogContext.globalCompositeOperation = 'source-over';
     }
 
     removeCharacter(character) {
@@ -288,11 +316,9 @@ class Camera {
         this.x = lerp(this.x, targetXCenter, 0.1);
         this.y = lerp(this.y, targetYCenter, 0.1);
 
-        // Begrenze die Kamera auf die Weltgrenzen
         this.x = Math.max(0, Math.min(this.x, this.worldWidth - this.viewportWidth));
         this.y = Math.max(0, Math.min(this.y, this.worldHeight - this.viewportHeight));
 
-        // Runde die x- und y-Position der Kamera auf die nächste Ganzzahl
         this.x = Math.floor(this.x);
         this.y = Math.floor(this.y);
     }
@@ -537,18 +563,16 @@ class Player extends Character {
 
         this.updateDirection(dx, dy);
 
-        // Check if the act animation is playing and it's the correct frame to shoot
         if (this.shooting && this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 5) {
             const targetX = this.x + this.lookVector.x * this.tileSize * 10;
             const targetY = this.y + this.lookVector.y * this.tileSize * 10;
             this.shootProjectile(game.projectiles, targetX, targetY, 1000, 0, 0);
-            this.lastShootTime = new Date().getTime(); // Update the last shoot time
+            this.lastShootTime = new Date().getTime();
         }
 
-        // Reset shooting flag and animation after the act animation is done
         if (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d'] || this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === this.currentAnimation.frameCount - 1) {
             this.shooting = false;
-            this.updateAnimation(); // Switch back to the appropriate animation
+            this.updateAnimation();
         }
 
         this.currentAnimation.update();
@@ -767,7 +791,6 @@ class Projectile {
         if (this.duration <= 0) {
             this.active = false;
         }
-        // Deaktiviere das Projektil, wenn es das Ziel erreicht
         if (Math.abs(this.x - this.targetX) < this.speed && Math.abs(this.y - this.targetY) < this.speed) {
             this.active = false;
         }

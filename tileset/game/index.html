@@ -13,17 +13,26 @@
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
         }
+        #fog {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <canvas id="game"></canvas>
+    <canvas id="fog"></canvas>
     <script>
-        function resize(){
+        function resize() {
             var canvas = document.getElementById('game');
-            canvas.width = window.innerWidth/4;
-            canvas.height = window.innerHeight/4;
-            canvas.style.width = window.innerWidth+"px";
-            canvas.style.height = window.innerHeight+"px";
+            var fogCanvas = document.getElementById('fog');
+            canvas.width = window.innerWidth / 4;
+            canvas.height = window.innerHeight / 4;
+            canvas.style.width = window.innerWidth + "px";
+            canvas.style.height = window.innerHeight + "px";
+            fogCanvas.width = window.innerWidth / 4;
+            fogCanvas.height = window.innerHeight / 4;
+            fogCanvas.style.width = window.innerWidth + "px";
+            fogCanvas.style.height = window.innerHeight + "px";
         }
         window.addEventListener("resize", resize);
         document.addEventListener("DOMContentLoaded", resize);
