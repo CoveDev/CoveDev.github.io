@@ -12,6 +12,7 @@ class Game {
             new Gatherer(this.tileSize, 250, 250) // Zweiter Gatherer
         ];
         this.projectiles = []; // Liste der Projektile
+        this.particles = []; // Liste der Partikel
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
@@ -177,12 +178,14 @@ class Game {
             this.allies.forEach(ally => ally.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.checkCollisions();
             this.updateProjectiles();
+            this.updateParticles(); // Update particles
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
             this.player.draw(this.context, this.camera, this.debug);
             this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug));
             this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
             this.drawProjectiles();
+            this.drawParticles(); // Draw particles
         }
         window.requestAnimationFrame(() => this.gameLoop());
     }
@@ -202,6 +205,15 @@ class Game {
 
     drawProjectiles() {
         this.projectiles.forEach(projectile => projectile.draw(this.context, this.camera));
+    }
+
+    updateParticles() {
+        this.particles.forEach(particle => particle.update());
+        this.particles = this.particles.filter(particle => particle.active);
+    }
+
+    drawParticles() {
+        this.particles.forEach(particle => particle.draw(this.context, this.camera));
     }
 
     drawTiles() {
@@ -229,6 +241,16 @@ class Game {
         this.enemies = this.enemies.filter(enemy => enemy !== character);
         this.allies = this.allies.filter(ally => ally !== character);
     }
+
+    addParticles(x, y, numParticles, speed, duration, color) {
+        for (let i = 0; i < numParticles; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const velocityX = Math.cos(angle) * speed;
+            const velocityY = Math.sin(angle) * speed;
+            const particle = new Particle(x, y, velocityX, velocityY, duration, color);
+            this.particles.push(particle);
+        }
+    }
 }
 
 class Character {
@@ -249,13 +271,29 @@ class Character {
         this.lookVector = { x: 0, y: 1 }; // Blickvektor initialisiert auf unten
         this.deleteOnDeath = deleteOnDeath; // Soll der Charakter nach dem Tod gelöscht werden
         this.alive = true; // Status, ob der Charakter lebt
+        this.blinking = false; // Status, ob der Charakter blinkt
+        this.blinkDuration = 0; // Dauer des Blinkens
+        this.deathAnimationPlayed = false; // Status, ob die Sterbeanimation abgespielt wurde
     }
 
     draw(context, camera, debug) {
-        if (!this.alive) return;
+        if (!this.alive && !this.deathAnimationPlayed) {
+            this.playDeathAnimation();
+            return;
+        }
         const drawX = Math.floor(this.x - camera.x + this.offsetX);
         const drawY = Math.floor(this.y - camera.y + this.offsetY);
+        
+        if (this.blinking) {
+            this.blinkDuration--;
+            if (this.blinkDuration % 10 < 3) {
+                context.globalCompositeOperation = 'lighter'; // Heller Effekt
+            }
+        }
+        
         this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
+        context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
+        
         if (debug) {
             context.strokeStyle = 'red';
             context.strokeRect(Math.floor(this.x - camera.x + (this.tileSize - this.hitbox.width) / 2), Math.floor(this.y - camera.y + (this.tileSize - this.hitbox.height) / 2), this.hitbox.width, this.hitbox.height);
@@ -284,26 +322,41 @@ class Character {
         return true;
     }
 
-    shootProjectile(projectiles, targetX, targetY) {
+    shootProjectile(projectiles, targetX, targetY, duration, offsetX, offsetY) {
         if (!this.alive) return;
-        const projectile = new Projectile(this.x, this.y, targetX, targetY, this.atk, this);
+        const centerX = this.x + (this.tileSize - this.hitbox.width) / 2 + this.hitbox.width / 2 + offsetX;
+        const centerY = this.y + (this.tileSize - this.hitbox.height) / 2 + this.hitbox.height / 2 + offsetY;
+        const projectile = new Projectile(centerX, centerY, targetX, targetY, this.atk, this, duration);
         projectiles.push(projectile);
     }
 
     takeDamage(damage) {
         if (!this.alive) return;
         this.hp -= damage;
+        this.startBlinking();
+        game.addParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 10, 1, 30, 'red'); // Add hit particles
         if (this.hp <= 0) {
             this.hp = 0;
             this.die();
         }
     }
 
-    die() {
-        this.alive = false;
+    startBlinking() {
+        this.blinking = true;
+        this.blinkDuration = 30; // Set the duration for blinking (e.g., 30 frames)
+    }
+
+    playDeathAnimation() {
+        // Implement death animation logic here
+        this.deathAnimationPlayed = true;
+        game.addParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 20, 1.5, 60, 'yellow'); // Add death particles
         if (this.deleteOnDeath) {
             game.removeCharacter(this);
         }
+    }
+
+    die() {
+        this.alive = false;
     }
 
     updateDirection(dx, dy) {
@@ -638,6 +691,36 @@ class Projectile {
             this.y >= hitboxY &&
             this.y <= hitboxY + character.hitbox.height
         );
+    }
+}
+
+class Particle {
+    constructor(x, y, velocityX, velocityY, duration, color) {
+        this.x = x;
+        this.y = y;
+        this.velocityX = velocityX;
+        this.velocityY = velocityY;
+        this.duration = duration;
+        this.color = color;
+        this.active = true;
+    }
+
+    update() {
+        if (!this.active) return;
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        this.duration--;
+        if (this.duration <= 0) {
+            this.active = false;
+        }
+    }
+
+    draw(context, camera) {
+        if (!this.active) return;
+        context.fillStyle = this.color;
+        context.beginPath();
+        context.arc(this.x - camera.x, this.y - camera.y, 2, 0, Math.PI * 2);
+        context.fill();
     }
 }
 
