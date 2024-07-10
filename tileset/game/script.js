@@ -414,10 +414,10 @@ class Slime extends Character {
             tileSize,
             x,
             y,
-            { width: 12, height: 12 },
+            { width: 8, height: 8 },
             1,
-            -8,
-            -8,
+            -14,
+            -21,
             'unten',
             {
                 'oben': 5,
