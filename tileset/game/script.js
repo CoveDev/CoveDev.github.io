@@ -224,10 +224,15 @@ class Game {
             }
         }
     }
+
+    removeCharacter(character) {
+        this.enemies = this.enemies.filter(enemy => enemy !== character);
+        this.allies = this.allies.filter(ally => ally !== character);
+    }
 }
 
 class Character {
-    constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations, atk, hp) {
+    constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations, atk, hp, deleteOnDeath = false) {
         this.tileSize = tileSize;
         this.x = x;
         this.y = y;
@@ -242,9 +247,12 @@ class Character {
         this.atk = atk;  // Angriffskraft
         this.hp = hp;    // Gesundheitspunkte
         this.lookVector = { x: 0, y: 1 }; // Blickvektor initialisiert auf unten
+        this.deleteOnDeath = deleteOnDeath; // Soll der Charakter nach dem Tod gelöscht werden
+        this.alive = true; // Status, ob der Charakter lebt
     }
 
     draw(context, camera, debug) {
+        if (!this.alive) return;
         const drawX = Math.floor(this.x - camera.x + this.offsetX);
         const drawY = Math.floor(this.y - camera.y + this.offsetY);
         this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
@@ -255,6 +263,7 @@ class Character {
     }
 
     canMoveTo(newX, newY, tiles, tilesX, tilesY) {
+        if (!this.alive) return false;
         const hitboxX = newX + (this.tileSize - this.hitbox.width) / 2;
         const hitboxY = newY + (this.tileSize - this.hitbox.height) / 2;
 
@@ -276,11 +285,13 @@ class Character {
     }
 
     shootProjectile(projectiles, targetX, targetY) {
+        if (!this.alive) return;
         const projectile = new Projectile(this.x, this.y, targetX, targetY, this.atk, this);
         projectiles.push(projectile);
     }
 
     takeDamage(damage) {
+        if (!this.alive) return;
         this.hp -= damage;
         if (this.hp <= 0) {
             this.hp = 0;
@@ -289,10 +300,14 @@ class Character {
     }
 
     die() {
-        // Implement character death logic
+        this.alive = false;
+        if (this.deleteOnDeath) {
+            game.removeCharacter(this);
+        }
     }
 
     updateDirection(dx, dy) {
+        if (!this.alive) return;
         if (dx === 0 && dy === 0) return;
 
         const absDx = Math.abs(dx);
@@ -346,7 +361,8 @@ class Player extends Character {
                 walk: new Animation('player_animations.png', 4, 44, 44, 100, 0)
             },
             10,  // ATK
-            100  // HP
+            100, // HP
+            false // Player should not be deleted on death
         );
         this.keys = { w: false, a: false, s: false, d: false };
     }
@@ -371,6 +387,7 @@ class Player extends Character {
     }
 
     update(tiles, tilesX, tilesY) {
+        if (!this.alive) return;
         let newX = this.x;
         let newY = this.y;
 
@@ -437,11 +454,13 @@ class Slime extends Character {
                 move: new Animation('slime_animations.png', 4, 44, 44, 100, 0)
             },
             5,  // ATK
-            30  // HP
+            30, // HP
+            true // Slime should be deleted on death
         );
     }
 
     update(player, tiles, tilesX, tilesY) {
+        if (!this.alive) return;
         let directionX = player.x - this.x;
         let directionY = player.y - this.y;
         let distance = Math.sqrt(directionX * directionX + directionY * directionY);
@@ -494,8 +513,9 @@ class Gatherer extends Character {
                 idle: new Animation('gatherer_animations.png', 4, 44, 44, 200, 5),
                 walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0)
             },
-            8,   // ATK
-            50   // HP
+            8,  // ATK
+            50, // HP
+            true // Gatherer should be deleted on death
         );
         this.path = [];
         this.pathIndex = 0;
@@ -504,6 +524,7 @@ class Gatherer extends Character {
     }
 
     update(player, tiles, tilesX, tilesY) {
+        if (!this.alive) return;
         if (this.path.length > 0) {
             this.currentAnimation = this.animations.walk;
             let target = this.path[this.pathIndex];
