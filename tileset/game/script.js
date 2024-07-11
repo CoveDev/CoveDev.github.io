@@ -16,7 +16,8 @@ class Game {
         ];
         this.projectiles = []; // Liste der Projektile
         this.particles = []; // Liste der Partikel
-        this.lamps = [new Lamp(100, 100, 330)]; // Beispiel für eine Lampe
+        this.lamps = [new Lamp(300, 300, 50)]; // Beispiel für eine Lampe
+        this.items = [new PickableItem(150, 150, 'lamp', true)]; // Beispiel für ein pickable Item
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
@@ -86,6 +87,13 @@ class Game {
             if (this.selectedGatherer) {
                 this.selectedGatherer.setWaypoint(worldX, worldY, this.tiles, this.tilesX, this.tilesY);
                 this.selectedGatherer = null; // Deselektiere den Gatherer
+            } else {
+                this.items.forEach(item => {
+                    if (this.isInsideHitbox(worldX, worldY, item)) {
+                        this.player.inventory.addItem(item);
+                        item.pickUp();
+                    }
+                });
             }
         }
     }
@@ -103,6 +111,13 @@ class Game {
         if (this.selectedGatherer) {
             this.selectedGatherer = null; // Deselektiere den Gatherer
             console.log('Gatherer deselected');
+        } else {
+            const selectedItem = this.player.inventory.getSelectedItem();
+            if (selectedItem && selectedItem.isPlacable) {
+                const newItem = new PlacableItem(worldX, worldY, selectedItem.type);
+                this.items.push(newItem);
+                this.player.inventory.removeSelectedItem();
+            }
         }
     }
 
@@ -188,6 +203,7 @@ class Game {
             this.player.draw(this.context, this.camera, this.debug);
             this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug));
             this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
+            this.items.forEach(item => item.draw(this.context, this.camera));
             this.drawProjectiles();
             this.drawParticles();
             this.drawLamps();
@@ -428,7 +444,6 @@ class Character {
         const projectile = new Projectile(centerX, centerY, targetX, targetY, this.atk, this, duration, 10);
         projectiles.push(projectile);
 
-        // Setze die Zeit des letzten Schusses auf die aktuelle Zeit
         this.lastShootTime = currentTime;
     }
 
@@ -449,7 +464,6 @@ class Character {
     }
 
     playDeathAnimation() {
-        // Implement death animation logic here
         this.deathAnimationPlayed = true;
         game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 20, 1.5, 60, 'death_particle_image.png', 4, 32, 32, 100); // Add death particles
         if (this.deleteOnDeath) {
@@ -522,6 +536,7 @@ class Player extends Character {
         );
         this.keys = { w: false, a: false, s: false, d: false };
         this.shooting = false; // Flag to check if the player is shooting
+        this.inventory = new Inventory(); // Player inventory
     }
 
     handleKeyDown(event) {
@@ -933,7 +948,7 @@ class Lamp {
         this.radius = radius;
     }
 
-    draw(context, camera) {/*
+    draw(context, camera) {
         const gradient = context.createRadialGradient(
             this.x - camera.x,
             this.y - camera.y,
@@ -948,7 +963,85 @@ class Lamp {
         context.beginPath();
         context.arc(this.x - camera.x, this.y - camera.y, this.radius, 0, Math.PI * 2, false);
         context.fillStyle = gradient;
-        context.fill();*/
+        context.fill();
+    }
+}
+
+// New Inventory Class
+class Inventory {
+    constructor() {
+        this.items = [];
+        this.selectedIndex = 0;
+    }
+
+    addItem(item) {
+        this.items.push(item);
+    }
+
+    getSelectedItem() {
+        return this.items[this.selectedIndex] || null;
+    }
+
+    removeSelectedItem() {
+        if (this.items.length > 0) {
+            this.items.splice(this.selectedIndex, 1);
+            this.selectedIndex = Math.max(0, this.selectedIndex - 1);
+        }
+    }
+
+    selectNextItem() {
+        this.selectedIndex = (this.selectedIndex + 1) % this.items.length;
+    }
+
+    selectPreviousItem() {
+        this.selectedIndex = (this.selectedIndex - 1 + this.items.length) % this.items.length;
+    }
+}
+
+// New Item Class
+class Item {
+    constructor(type, isPlacable = false, isAnimated = false) {
+        this.type = type;
+        this.isPlacable = isPlacable;
+        this.isAnimated = isAnimated;
+    }
+}
+
+// New PickableItem Class
+class PickableItem extends Item {
+    constructor(x, y, type, isPlacable = false, isAnimated = false) {
+        super(type, isPlacable, isAnimated);
+        this.x = x;
+        this.y = y;
+        this.hitbox = { width: 16, height: 16 };
+        this.pickedUp = false;
+    }
+
+    draw(context, camera) {
+        if (this.pickedUp) return;
+        // Placeholder for item image
+        context.fillStyle = 'yellow';
+        context.fillRect(this.x - camera.x, this.y - camera.y, this.hitbox.width, this.hitbox.height);
+    }
+
+    pickUp() {
+        this.pickedUp = true;
+    }
+}
+
+// New PlacableItem Class
+class PlacableItem extends Item {
+    constructor(x, y, type, isAnimated = false) {
+        super(type, true, isAnimated);
+        this.x = x;
+        this.y = y;
+        this.hitbox = { width: 16, height: 16 };
+    }
+
+    draw(context, camera) {
+        // Placeholder for placed item image
+        context.fillStyle = 'blue';
+        context.fillRect(this.x - camera.x, this.y - camera.y, this.hitbox.width, this.hitbox.height);
     }
 }
 
