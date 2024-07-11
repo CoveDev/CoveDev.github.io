@@ -566,7 +566,7 @@ class Player extends Character {
 
         // Check for collision with items
         items.forEach(item => {
-            if (!item.pickedUp && game.areColliding(this, item)) {
+            if (!item.pickedUp && this.isCollidingWithItem(item)) {
                 this.inventory.addItem(item);
                 item.pickUp();
             }
@@ -595,6 +595,17 @@ class Player extends Character {
         } else {
             this.currentAnimation = this.animations.idle;
         }
+    }
+
+    isCollidingWithItem(item) {
+        const hitboxX = this.x + (this.tileSize - this.hitbox.width) / 2;
+        const hitboxY = this.y + (this.tileSize - this.hitbox.height) / 2;
+        return (
+            hitboxX < item.x + item.hitbox.width &&
+            hitboxX + this.hitbox.width > item.x &&
+            hitboxY < item.y + item.hitbox.height &&
+            hitboxY + this.hitbox.height > item.y
+        );
     }
 }
 
