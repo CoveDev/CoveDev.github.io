@@ -17,7 +17,7 @@ class Game {
         this.projectiles = []; // Liste der Projektile
         this.particles = []; // Liste der Partikel
         this.lamps = [new Lamp(300, 300, 50)]; // Beispiel für eine Lampe
-        this.items = [new PickableItem(150, 150, 'lamp', true, new Animation('lamp_animation.png', 4, 32, 32, 100))]; // Beispiel für ein pickable Item
+        this.items = [new PickableItem(100, 150, 'lamp', true, new Animation('lamp_animation.png', 4, 16, 16, 100))]; // Beispiel für ein pickable Item
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
@@ -60,42 +60,7 @@ class Game {
         window.addEventListener('keydown', (event) => this.player.handleKeyDown(event));
         window.addEventListener('keyup', (event) => this.player.handleKeyUp(event));
 
-        this.canvas.addEventListener('click', (event) => this.handleCanvasClick(event));
         this.canvas.addEventListener('contextmenu', (event) => this.handleCanvasRightClick(event));
-    }
-
-    handleCanvasClick(event) {
-        event.preventDefault();
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
-        const worldX = mouseX / 4 + this.camera.x;
-        const worldY = mouseY / 4 + this.camera.y;
-
-        console.log(`Mouse: ${worldX}, ${worldY}`);
-
-        let gathererClicked = false;
-
-        this.allies.forEach(ally => {
-            if (this.isInsideHitbox(worldX, worldY, ally)) {
-                this.selectedGatherer = ally;
-                gathererClicked = true;
-            }
-        });
-
-        if (!gathererClicked) {
-            if (this.selectedGatherer) {
-                this.selectedGatherer.setWaypoint(worldX, worldY, this.tiles, this.tilesX, this.tilesY);
-                this.selectedGatherer = null; // Deselektiere den Gatherer
-            } else {
-                this.items.forEach(item => {
-                    if (this.isInsideHitbox(worldX, worldY, item)) {
-                        this.player.inventory.addItem(item);
-                        item.pickUp();
-                    }
-                });
-            }
-        }
     }
 
     handleCanvasRightClick(event) {
@@ -192,7 +157,7 @@ class Game {
         this.fogContext.clearRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
         
         if (this.tiles.length > 0) {
-            this.player.update(this.tiles, this.tilesX, this.tilesY);
+            this.player.update(this.tiles, this.tilesX, this.tilesY, this.items);
             this.enemies.forEach(enemy => enemy.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.allies.forEach(ally => ally.update(this.player, this.tiles, this.tilesX, this.tilesY));
             this.checkCollisions();
@@ -568,7 +533,7 @@ class Player extends Character {
         this.updateAnimation();
     }
 
-    update(tiles, tilesX, tilesY) {
+    update(tiles, tilesX, tilesY, items) {
         if (!this.alive) return;
         let newX = this.x;
         let newY = this.y;
@@ -598,6 +563,14 @@ class Player extends Character {
         }
 
         this.updateDirection(dx, dy);
+
+        // Check for collision with items
+        items.forEach(item => {
+            if (!item.pickedUp && game.areColliding(this, item)) {
+                this.inventory.addItem(item);
+                item.pickUp();
+            }
+        });
 
         if (this.shooting && this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 5) {
             const targetX = this.x + this.lookVector.x * this.tileSize * 10;
