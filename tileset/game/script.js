@@ -17,7 +17,7 @@ class Game {
         this.projectiles = []; // Liste der Projektile
         this.particles = []; // Liste der Partikel
         this.lamps = [new Lamp(300, 300, 50)]; // Beispiel für eine Lampe
-        this.items = [new PickableItem(150, 150, 'lamp', true)]; // Beispiel für ein pickable Item
+        this.items = [new PickableItem(150, 150, 'lamp', true, new Animation('lamp_animation.png', 4, 32, 32, 100))]; // Beispiel für ein pickable Item
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
@@ -114,7 +114,7 @@ class Game {
         } else {
             const selectedItem = this.player.inventory.getSelectedItem();
             if (selectedItem && selectedItem.isPlacable) {
-                const newItem = new PlacableItem(worldX, worldY, selectedItem.type);
+                const newItem = new PlacableItem(worldX, worldY, selectedItem.type, selectedItem.animation);
                 this.items.push(newItem);
                 this.player.inventory.removeSelectedItem();
             }
@@ -198,6 +198,7 @@ class Game {
             this.checkCollisions();
             this.updateProjectiles();
             this.updateParticles();
+            this.updateItems();
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
             this.player.draw(this.context, this.camera, this.debug);
@@ -242,6 +243,12 @@ class Game {
 
     drawParticles() {
         this.particles.forEach(particle => particle.draw(this.context, this.camera));
+    }
+
+    updateItems() {
+        this.items.forEach(item => {
+            if (item.animation) item.animation.update();
+        });
     }
 
     drawTiles() {
@@ -926,7 +933,7 @@ class Animation {
         }
     }
 
-    draw(context, x, y, direction) {
+    draw(context, x, y, direction = 0) {
         context.drawImage(
             this.image,
             this.currentFrame * this.frameWidth + this.columnOffset * this.frameWidth,
@@ -1000,17 +1007,17 @@ class Inventory {
 
 // New Item Class
 class Item {
-    constructor(type, isPlacable = false, isAnimated = false) {
+    constructor(type, isPlacable = false, animation = null) {
         this.type = type;
         this.isPlacable = isPlacable;
-        this.isAnimated = isAnimated;
+        this.animation = animation;
     }
 }
 
 // New PickableItem Class
 class PickableItem extends Item {
-    constructor(x, y, type, isPlacable = false, isAnimated = false) {
-        super(type, isPlacable, isAnimated);
+    constructor(x, y, type, isPlacable = false, animation = null) {
+        super(type, isPlacable, animation);
         this.x = x;
         this.y = y;
         this.hitbox = { width: 16, height: 16 };
@@ -1019,9 +1026,12 @@ class PickableItem extends Item {
 
     draw(context, camera) {
         if (this.pickedUp) return;
-        // Placeholder for item image
-        context.fillStyle = 'yellow';
-        context.fillRect(this.x - camera.x, this.y - camera.y, this.hitbox.width, this.hitbox.height);
+        if (this.animation) {
+            this.animation.draw(context, this.x - camera.x, this.y - camera.y);
+        } else {
+            context.fillStyle = 'yellow';
+            context.fillRect(this.x - camera.x, this.y - camera.y, this.hitbox.width, this.hitbox.height);
+        }
     }
 
     pickUp() {
@@ -1031,17 +1041,20 @@ class PickableItem extends Item {
 
 // New PlacableItem Class
 class PlacableItem extends Item {
-    constructor(x, y, type, isAnimated = false) {
-        super(type, true, isAnimated);
+    constructor(x, y, type, animation = null) {
+        super(type, true, animation);
         this.x = x;
         this.y = y;
         this.hitbox = { width: 16, height: 16 };
     }
 
     draw(context, camera) {
-        // Placeholder for placed item image
-        context.fillStyle = 'blue';
-        context.fillRect(this.x - camera.x, this.y - camera.y, this.hitbox.width, this.hitbox.height);
+        if (this.animation) {
+            this.animation.draw(context, this.x - camera.x, this.y - camera.y);
+        } else {
+            context.fillStyle = 'blue';
+            context.fillRect(this.x - camera.x, this.y - camera.y, this.hitbox.width, this.hitbox.height);
+        }
     }
 }
 
