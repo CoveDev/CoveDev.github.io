@@ -16,6 +16,7 @@ class Game {
         ];
         this.projectiles = []; // Liste der Projektile
         this.particles = []; // Liste der Partikel
+        this.lamps = [new Lamp(100, 100, 330)]; // Beispiel für eine Lampe
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
@@ -189,9 +190,16 @@ class Game {
             this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
             this.drawProjectiles();
             this.drawParticles();
+            this.drawLamps();
             this.drawFogOfWar();
         }
         window.requestAnimationFrame(() => this.gameLoop());
+    }
+
+    drawLamps() {
+        this.lamps.forEach(lamp => {
+            lamp.draw(this.context, this.camera);
+        });
     }
 
     updateProjectiles() {
@@ -251,11 +259,19 @@ class Game {
             this.clearFogAroundCharacter(ally);
         });
 
+        this.lamps.forEach(lamp => {
+            this.clearFogAroundCharacter(lamp, lamp.radius);
+        });
+
+        this.projectiles.forEach(projectile => {
+            this.clearFogAroundCharacter(projectile, projectile.glow);
+        });
+
         this.context.drawImage(this.fogCanvas, 0, 0);
     }
 
-    clearFogAroundCharacter(character) {
-        const fogRadius = 50;
+    clearFogAroundCharacter(character, radius = 50) {
+        const fogRadius = radius;
         const centerX = character.x - this.camera.x + this.tileSize / 2;
         const centerY = character.y - this.camera.y + this.tileSize / 2;
 
@@ -271,22 +287,22 @@ class Game {
         this.allies = this.allies.filter(ally => ally !== character);
     }
 
-    addParticles(x, y, numParticles, speed, duration, color) {
+    addParticles(x, y, numParticles, speed, duration, color, glow = false) {
         for (let i = 0; i < numParticles; i++) {
             const angle = Math.random() * Math.PI * 2;
             const velocityX = Math.cos(angle) * speed;
             const velocityY = Math.sin(angle) * speed;
-            const particle = new Particle(x, y, velocityX, velocityY, duration, color);
+            const particle = new Particle(x, y, velocityX, velocityY, duration, color, glow);
             this.particles.push(particle);
         }
     }
 
-    addAnimatedParticles(x, y, numParticles, speed, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration) {
+    addAnimatedParticles(x, y, numParticles, speed, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration, glow = false) {
         for (let i = 0; i < numParticles; i++) {
             const angle = Math.random() * Math.PI * 2;
             const velocityX = Math.cos(angle) * speed;
             const velocityY = Math.sin(angle) * speed;
-            const particle = new Particle(x, y, velocityX, velocityY, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration);
+            const particle = new Particle(x, y, velocityX, velocityY, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration, glow);
             this.particles.push(particle);
         }
     }
@@ -323,7 +339,6 @@ class Camera {
         this.y = Math.floor(this.y);
     }
 }
-
 
 class Character {
     constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations, atk, hp, deleteOnDeath = false) {
@@ -410,7 +425,7 @@ class Character {
         targetX += (this.tileSize - this.hitbox.width) / 2 + this.hitbox.width / 2 + offsetX;
         targetY += (this.tileSize - this.hitbox.height) / 2 + this.hitbox.height / 2 + offsetY;
 
-        const projectile = new Projectile(centerX, centerY, targetX, targetY, this.atk, this, duration);
+        const projectile = new Projectile(centerX, centerY, targetX, targetY, this.atk, this, duration, 10);
         projectiles.push(projectile);
 
         // Setze die Zeit des letzten Schusses auf die aktuelle Zeit
@@ -475,7 +490,6 @@ class Character {
     }
 }
 
-// Derived Classes from Character
 class Player extends Character {
     constructor(tileSize) {
         super(
@@ -588,8 +602,6 @@ class Player extends Character {
         }
     }
 }
-
-
 
 class Slime extends Character {
     constructor(tileSize, x, y) {
@@ -705,7 +717,6 @@ class Gatherer extends Character {
             let distance = Math.sqrt(directionX * directionX + directionY * directionY);
 
             if (distance < 4) {
-                // Reached waypoint
                 this.pathIndex++;
                 if (this.pathIndex >= this.path.length) {
                     this.path = [];
@@ -760,13 +771,12 @@ class Gatherer extends Character {
             this.stuckCounter = 0;
             this.previousPosition = { x: this.x, y: this.y };
         }
-        // Consider the gatherer stuck if it hasn't moved for 30 updates
         return this.stuckCounter > 30;
     }
 }
 
 class Projectile {
-    constructor(x, y, targetX, targetY, atk, sender, duration) {
+    constructor(x, y, targetX, targetY, atk, sender, duration, glow = false) {
         this.x = x;
         this.y = y;
         this.targetX = targetX;
@@ -781,6 +791,7 @@ class Projectile {
         this.velocityX = (dx / distance) * this.speed;
         this.velocityY = (dy / distance) * this.speed;
         this.active = true;  // Projektile sind aktiv, solange sie sich bewegen
+        this.glow = glow;  // Projektil soll nicht leuchten
     }
 
     update() {
@@ -820,9 +831,9 @@ class Projectile {
 }
 
 class Particle {
-    constructor(x, y, velocityX, velocityY, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration) {
-        this.x = x - frameWidth/2;
-        this.y = y - frameHeight/2;
+    constructor(x, y, velocityX, velocityY, duration, imageSrc, frameCount, frameWidth, frameHeight, frameDuration, glow = false) {
+        this.x = x - frameWidth / 2;
+        this.y = y - frameHeight / 2;
         this.velocityX = velocityX;
         this.velocityY = velocityY;
         this.duration = duration;
@@ -837,6 +848,7 @@ class Particle {
 
         this.currentFrame = 0;
         this.elapsedTime = 0;
+        this.glow = glow;
     }
 
     update() {
@@ -858,12 +870,23 @@ class Particle {
     draw(context, camera) {
         if (!this.active) return;
         const frameX = this.currentFrame * this.frameWidth;
+        
+        if (this.glow) {
+            context.save();
+            context.shadowBlur = 20;
+            context.shadowColor = "white";
+        }
+
         context.drawImage(
             this.image,
             frameX, 0, this.frameWidth, this.frameHeight,
             this.x - camera.x, this.y - camera.y,
             this.frameWidth, this.frameHeight
         );
+
+        if (this.glow) {
+            context.restore();
+        }
     }
 }
 
@@ -900,6 +923,32 @@ class Animation {
             this.frameWidth,
             this.frameHeight
         );
+    }
+}
+
+class Lamp {
+    constructor(x, y, radius) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+    }
+
+    draw(context, camera) {/*
+        const gradient = context.createRadialGradient(
+            this.x - camera.x,
+            this.y - camera.y,
+            0,
+            this.x - camera.x,
+            this.y - camera.y,
+            this.radius
+        );
+        gradient.addColorStop(0, 'rgba(255, 255, 200, 0.8)');
+        gradient.addColorStop(1, 'rgba(255, 255, 200, 0)');
+        
+        context.beginPath();
+        context.arc(this.x - camera.x, this.y - camera.y, this.radius, 0, Math.PI * 2, false);
+        context.fillStyle = gradient;
+        context.fill();*/
     }
 }
 
