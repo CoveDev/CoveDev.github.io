@@ -12,19 +12,20 @@ class Game {
         this.enemies = [new Slime(this.tileSize, 100, 100)];
         this.allies = [
             new Gatherer(this.tileSize, 200, 200),
-            new Gatherer(this.tileSize, 250, 250)
+            new Gatherer(this.tileSize, 250, 250) // Zweiter Gatherer
         ];
-        this.projectiles = [];
-        this.particles = [];
-        this.lamps = [new Lamp(300, 300, 50)];
-        this.items = [new PickableItem(100, 150, 'lamp', true, new Animation('lamp_animation.png', 4, 16, 16, 100))];
+        this.projectiles = []; // Liste der Projektile
+        this.particles = []; // Liste der Partikel
+        this.lamps = [new Lamp(300, 300, 50)]; // Beispiel für eine Lampe
+        this.items = [new PickableItem(150, 150, 'lamp', true, new Animation('lamp_animation.png', 4, 32, 32, 100))]; // Beispiel für ein pickable Item
         this.tilesetImage = new Image();
-        this.tilesetImage.src = 'tileset.png';
+        this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
-        this.generatePerlinWorld(50, 50);
+        this.generatePerlinWorld(50, 50);  // Generiere eine 50x50 Perlin Noise Welt
         this.camera = new Camera(this.canvas.width, this.canvas.height, this.tilesX * this.tileSize, this.tilesY * this.tileSize);
-        this.debug = 1;
-        this.selectedGatherer = null;
+        this.debug = 1;  // Debug-Variable zum Anzeigen der Hitboxen
+        this.selectedGatherer = null;  // Der ausgewählte Gatherer
+        this.light = { x: 0, y: 0, z: 100, intensity: 1 }; // Add light source
         this.initEvents();
         this.resizeCanvas();
         window.requestAnimationFrame(() => this.gameLoop());
@@ -42,19 +43,24 @@ class Game {
         this.tilesX = width;
         this.tilesY = height;
         this.tiles = [];
+
         for (let y = 0; y < height; y++) {
             this.tiles[y] = [];
             for (let x = 0; x < width; x++) {
                 const noiseValue = this.noise.noise(x * 0.1, y * 0.1);
-                this.tiles[y][x] = noiseValue > 0 ? 1 : 0;
+                this.tiles[y][x] = noiseValue > 0 ? 1 : 0;  // Schwellenwert zum Setzen der Fliese
             }
         }
     }
 
     initEvents() {
-        window.addEventListener('resize', () => this.resizeCanvas());
+        window.addEventListener('resize', () => {
+            this.resizeCanvas();
+        });
+
         window.addEventListener('keydown', (event) => this.player.handleKeyDown(event));
         window.addEventListener('keyup', (event) => this.player.handleKeyUp(event));
+
         this.canvas.addEventListener('contextmenu', (event) => this.handleCanvasRightClick(event));
     }
 
@@ -65,9 +71,11 @@ class Game {
         const mouseY = event.clientY - rect.top;
         const worldX = mouseX / 4 + this.camera.x;
         const worldY = mouseY / 4 + this.camera.y;
+
         console.log(`Right Mouse: ${worldX}, ${worldY}`);
+
         if (this.selectedGatherer) {
-            this.selectedGatherer = null;
+            this.selectedGatherer = null; // Deselektiere den Gatherer
             console.log('Gatherer deselected');
         } else {
             const selectedItem = this.player.inventory.getSelectedItem();
@@ -114,6 +122,7 @@ class Game {
             width: character2.hitbox.width,
             height: character2.hitbox.height
         };
+
         return (
             hitbox1.x < hitbox2.x + hitbox2.width &&
             hitbox1.x + hitbox1.width > hitbox2.x &&
@@ -126,14 +135,18 @@ class Game {
         const dx = (character1.x + character1.tileSize / 2) - (character2.x + character2.tileSize / 2);
         const dy = (character1.y + character1.tileSize / 2) - (character2.y + character2.tileSize / 2);
         const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance === 0) return;
+
+        if (distance === 0) return; // Prevent division by zero
+
         const overlap = (character1.hitbox.width / 2 + character2.hitbox.width / 2) - distance;
         const pushX = dx / distance * overlap / 2;
         const pushY = dy / distance * overlap / 2;
+
         if (character1.canMoveTo(character1.x + pushX, character1.y + pushY, this.tiles, this.tilesX, this.tilesY)) {
             character1.x += pushX;
             character1.y += pushY;
         }
+
         if (character2.canMoveTo(character2.x - pushX, character2.y - pushY, this.tiles, this.tilesX, this.tilesY)) {
             character2.x -= pushX;
             character2.y -= pushY;
@@ -143,6 +156,7 @@ class Game {
     gameLoop() {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.fogContext.clearRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
+        
         if (this.tiles.length > 0) {
             this.player.update(this.tiles, this.tilesX, this.tilesY, this.items);
             this.enemies.forEach(enemy => enemy.update(this.player, this.tiles, this.tilesX, this.tilesY));
@@ -153,9 +167,9 @@ class Game {
             this.updateItems();
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
-            this.player.draw(this.context, this.camera, this.debug);
-            this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug));
-            this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
+            this.player.draw(this.context, this.camera, this.debug, this.light);
+            this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug, this.light));
+            this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug, this.light));
             this.items.forEach(item => item.draw(this.context, this.camera));
             this.drawProjectiles();
             this.drawParticles();
@@ -166,7 +180,9 @@ class Game {
     }
 
     drawLamps() {
-        this.lamps.forEach(lamp => lamp.draw(this.context, this.camera));
+        this.lamps.forEach(lamp => {
+            lamp.draw(this.context, this.camera);
+        });
     }
 
     updateProjectiles() {
@@ -208,6 +224,7 @@ class Game {
         const endRow = startRow + Math.ceil(this.camera.viewportHeight / this.tileSize);
         const offsetX = -this.camera.x + startCol * this.tileSize;
         const offsetY = -this.camera.y + startRow * this.tileSize;
+
         for (let y = startRow; y <= endRow; y++) {
             for (let x = startCol; x <= endCol; x++) {
                 if (y >= 0 && y < this.tilesY && x >= 0 && x < this.tilesX) {
@@ -222,10 +239,15 @@ class Game {
     }
 
     drawFogOfWar() {
-        this.fogContext.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        this.fogContext.fillStyle = 'rgba(0, 0, 0, 0.8)'; // Fog of war color
         this.fogContext.fillRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
+
         this.clearFogAroundCharacter(this.player);
-        this.allies.forEach(ally => this.clearFogAroundCharacter(ally));
+
+        this.allies.forEach(ally => {
+            this.clearFogAroundCharacter(ally);
+        });
+
         this.lamps.forEach(lamp => this.clearFogAroundCharacter(lamp, lamp.radius));
         this.projectiles.forEach(projectile => this.clearFogAroundCharacter(projectile, projectile.glow));
         this.context.drawImage(this.fogCanvas, 0, 0);
@@ -235,6 +257,7 @@ class Game {
         const fogRadius = radius;
         const centerX = character.x - this.camera.x + this.tileSize / 2;
         const centerY = character.y - this.camera.y + this.tileSize / 2;
+
         this.fogContext.globalCompositeOperation = 'destination-out';
         this.fogContext.beginPath();
         this.fogContext.arc(centerX, centerY, fogRadius, 0, Math.PI * 2, false);
@@ -309,34 +332,37 @@ class Character {
         this.directions = directions;
         this.animations = animations;
         this.currentAnimation = this.animations.idle;
-        this.atk = atk;
-        this.hp = hp;
-        this.lookVector = { x: 0, y: 1 };
-        this.deleteOnDeath = deleteOnDeath;
-        this.alive = true;
-        this.blinking = false;
-        this.blinkDuration = 0;
-        this.deathAnimationPlayed = false;
-        this.shootCooldown = 500;
+        this.atk = atk;  // Angriffskraft
+        this.hp = hp;    // Gesundheitspunkte
+        this.lookVector = { x: 0, y: 1 }; // Blickvektor initialisiert auf unten
+        this.deleteOnDeath = deleteOnDeath; // Soll der Charakter nach dem Tod gelöscht werden
+        this.alive = true; // Status, ob der Charakter lebt
+        this.blinking = false; // Status, ob der Charakter blinkt
+        this.blinkDuration = 0; // Dauer des Blinkens
+        this.deathAnimationPlayed = false; // Status, ob die Sterbeanimation abgespielt wurde
+        this.shootCooldown = 500;  // in Millisekunden, Beispielwert
         this.lastShootTime = 0;
     }
 
-    draw(context, camera, debug) {
+    draw(context, camera, debug, light) {
         if (!this.alive && !this.deathAnimationPlayed) {
             this.playDeathAnimation();
             return;
         }
         const drawX = Math.floor(this.x - camera.x + this.offsetX);
         const drawY = Math.floor(this.y - camera.y + this.offsetY);
-        context.globalCompositeOperation = 'source-over';
+        context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
+        
         if (this.blinkDuration > 0) {
             this.blinkDuration--;
             if (this.blinkDuration % 10 < 5) {
-                context.globalCompositeOperation = 'lighter';
+                context.globalCompositeOperation = 'lighter'; // Heller Effekt
             }
         }
-        this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
-        context.globalCompositeOperation = 'source-over';
+
+        this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction], light);
+        context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
+        
         if (debug) {
             context.strokeStyle = 'red';
             context.strokeRect(Math.floor(this.x - camera.x + (this.tileSize - this.hitbox.width) / 2), Math.floor(this.y - camera.y + (this.tileSize - this.hitbox.height) / 2), this.hitbox.width, this.hitbox.height);
@@ -823,7 +849,7 @@ class Particle {
 }
 
 class Animation {
-    constructor(imageSrc, frameCount, frameWidth, frameHeight, frameDuration, columnOffset = 0) {
+    constructor(imageSrc, frameCount, frameWidth, frameHeight, frameDuration, columnOffset = 0, normalMapSrc = null) {
         this.image = new Image();
         this.image.src = imageSrc;
         this.frameCount = frameCount;
@@ -833,17 +859,24 @@ class Animation {
         this.columnOffset = columnOffset;
         this.currentFrame = 0;
         this.elapsedTime = 0;
+
+        if (normalMapSrc) {
+            this.normalMap = new Image();
+            this.normalMap.src = normalMapSrc;
+        } else {
+            this.normalMap = null;
+        }
     }
 
     update() {
-        this.elapsedTime += 1000 / 60;
+        this.elapsedTime += 1000 / 60;  // Assuming 60 FPS
         if (this.elapsedTime >= this.frameDuration) {
             this.elapsedTime = 0;
             this.currentFrame = (this.currentFrame + 1) % this.frameCount;
         }
     }
 
-    draw(context, x, y, direction = 0) {
+    draw(context, x, y, direction = 0, light = null) {
         context.drawImage(
             this.image,
             this.currentFrame * this.frameWidth + this.columnOffset * this.frameWidth,
@@ -855,6 +888,55 @@ class Animation {
             this.frameWidth,
             this.frameHeight
         );
+
+        if (this.normalMap && light) {
+            this.drawWithNormalMap(context, x, y, direction, light);
+        }
+    }
+
+    drawWithNormalMap(context, x, y, direction, light) {
+        const normalMapCanvas = document.createElement('canvas');
+        normalMapCanvas.width = this.frameWidth;
+        normalMapCanvas.height = this.frameHeight;
+        const normalMapContext = normalMapCanvas.getContext('2d');
+
+        normalMapContext.drawImage(
+            this.normalMap,
+            this.currentFrame * this.frameWidth + this.columnOffset * this.frameWidth,
+            direction * this.frameHeight,
+            this.frameWidth,
+            this.frameHeight,
+            0,
+            0,
+            this.frameWidth,
+            this.frameHeight
+        );
+
+        const normalData = normalMapContext.getImageData(0, 0, this.frameWidth, this.frameHeight).data;
+        const imageData = context.getImageData(x, y, this.frameWidth, this.frameHeight);
+
+        const lightX = light.x - x;
+        const lightY = light.y - y;
+        const lightZ = light.z;
+
+        for (let i = 0; i < normalData.length; i += 4) {
+            const nx = normalData[i] / 255 * 2 - 1;
+            const ny = normalData[i + 1] / 255 * 2 - 1;
+            const nz = normalData[i + 2] / 255 * 2 - 1;
+
+            const lx = lightX / lightZ;
+            const ly = lightY / lightZ;
+            const lz = 1;
+
+            const dot = Math.max(0, nx * lx + ny * ly + nz * lz);
+            const shading = dot * light.intensity;
+
+            imageData.data[i] = imageData.data[i] * shading;
+            imageData.data[i + 1] = imageData.data[i + 1] * shading;
+            imageData.data[i + 2] = imageData.data[i + 2] * shading;
+        }
+
+        context.putImageData(imageData, x, y);
     }
 }
 
