@@ -341,15 +341,15 @@ class Character {
         this.directions = directions;
         this.animations = animations;
         this.currentAnimation = this.animations.idle;
-        this.atk = atk;
-        this.hp = hp;
-        this.lookVector = { x: 0, y: 1 };
-        this.deleteOnDeath = deleteOnDeath;
-        this.alive = true;
-        this.blinking = false;
-        this.blinkDuration = 0;
-        this.deathAnimationPlayed = false;
-        this.shootCooldown = 500;
+        this.atk = atk;  // Angriffskraft
+        this.hp = hp;    // Gesundheitspunkte
+        this.lookVector = { x: 0, y: 1 }; // Blickvektor initialisiert auf unten
+        this.deleteOnDeath = deleteOnDeath; // Soll der Charakter nach dem Tod gelöscht werden
+        this.alive = true; // Status, ob der Charakter lebt
+        this.blinking = false; // Status, ob der Charakter blinkt
+        this.blinkDuration = 0; // Dauer des Blinkens
+        this.deathAnimationPlayed = false; // Status, ob die Sterbeanimation abgespielt wurde
+        this.shootCooldown = 500;  // in Millisekunden, Beispielwert
         this.lastShootTime = 0;
 
         this.normalMap = normalMapSrc ? new Image() : null;
@@ -363,36 +363,35 @@ class Character {
             this.playDeathAnimation();
             return;
         }
-
         const drawX = Math.floor(this.x - camera.x + this.offsetX);
         const drawY = Math.floor(this.y - camera.y + this.offsetY);
+        context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
         
-        context.globalCompositeOperation = 'source-over';
-
         if (this.blinkDuration > 0) {
             this.blinkDuration--;
             if (this.blinkDuration % 10 < 5) {
-                context.globalCompositeOperation = 'lighter';
+                context.globalCompositeOperation = 'lighter'; // Heller Effekt
             }
         }
-
+        
         if (this.normalMap) {
-            this.drawWithLighting(context, drawX, drawY, lamps);
+            this.drawWithNormalMapLighting(context, camera, drawX, drawY, lamps);
         } else {
             this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
         }
-
-        context.globalCompositeOperation = 'source-over';
-
+        
+        context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
+        
         if (debug) {
             context.strokeStyle = 'red';
             context.strokeRect(Math.floor(this.x - camera.x + (this.tileSize - this.hitbox.width) / 2), Math.floor(this.y - camera.y + (this.tileSize - this.hitbox.height) / 2), this.hitbox.width, this.hitbox.height);
         }
     }
-    
-    drawWithLighting(context, drawX, drawY, lamps) {
-        context.save();
-        
+
+    drawWithNormalMapLighting(context, camera, drawX, drawY, lamps) {
+        const normalMapFrameX = this.currentAnimation.currentFrame * this.currentAnimation.frameWidth;
+        const normalMapFrameY = this.directions[this.direction] * this.currentAnimation.frameHeight;
+
         lamps.forEach(lamp => {
             if (lamp.affectsNormalMaps) {
                 const distance = Math.sqrt(Math.pow((this.x - lamp.x), 2) + Math.pow((this.y - lamp.y), 2));
@@ -400,16 +399,27 @@ class Character {
                 const lightIntensity = Math.max(0, 1 - distance / maxDistance);
 
                 if (lightIntensity > 0) {
-                    const normalMapX = drawX - camera.x;
-                    const normalMapY = drawY - camera.y;
-                    
+                    const normalMapX = drawX;
+                    const normalMapY = drawY;
+
+                    context.save();
                     context.globalAlpha = lightIntensity * 0.5; // Control intensity of normal map effect
-                    context.drawImage(this.normalMap, normalMapX, normalMapY);
+                    context.drawImage(
+                        this.normalMap,
+                        normalMapFrameX,
+                        normalMapFrameY,
+                        this.currentAnimation.frameWidth,
+                        this.currentAnimation.frameHeight,
+                        normalMapX,
+                        normalMapY,
+                        this.currentAnimation.frameWidth,
+                        this.currentAnimation.frameHeight
+                    );
+                    context.restore();
                 }
             }
         });
 
-        context.restore();
         this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
     }
 
@@ -539,7 +549,8 @@ class Player extends Character {
             },
             10,  // ATK
             100, // HP
-            false // Player should not be deleted on death
+            false, // Player should not be deleted on death
+            'player_animations_normal.png' // Path to the normal map image
         );
         this.keys = { w: false, a: false, s: false, d: false };
         this.shooting = false; // Flag to check if the player is shooting
