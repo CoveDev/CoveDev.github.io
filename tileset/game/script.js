@@ -17,7 +17,7 @@ class Game {
         this.projectiles = []; // Liste der Projektile
         this.particles = []; // Liste der Partikel
         this.lamps = [new Lamp(300, 300, 50)]; // Beispiel für eine Lampe
-        this.items = [new PickableItem(150, 150, 'lamp', true, new Animation('lamp_animation.png', 4, 32, 32, 100))]; // Beispiel für ein pickable Item
+        this.items = [new PickableItem(100, 150, 'lamp', true, new Animation('lamp_animation.png', 4, 16, 16, 100))]; // Beispiel für ein pickable Item
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
         this.noise = new SimplexNoise(seed);
@@ -25,7 +25,6 @@ class Game {
         this.camera = new Camera(this.canvas.width, this.canvas.height, this.tilesX * this.tileSize, this.tilesY * this.tileSize);
         this.debug = 1;  // Debug-Variable zum Anzeigen der Hitboxen
         this.selectedGatherer = null;  // Der ausgewählte Gatherer
-        this.light = { x: 0, y: 0, z: 100, intensity: 1 }; // Add light source
         this.initEvents();
         this.resizeCanvas();
         window.requestAnimationFrame(() => this.gameLoop());
@@ -167,9 +166,9 @@ class Game {
             this.updateItems();
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
-            this.player.draw(this.context, this.camera, this.debug, this.light);
-            this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug, this.light));
-            this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug, this.light));
+            this.player.draw(this.context, this.camera, this.debug);
+            this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug));
+            this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
             this.items.forEach(item => item.draw(this.context, this.camera));
             this.drawProjectiles();
             this.drawParticles();
@@ -248,8 +247,14 @@ class Game {
             this.clearFogAroundCharacter(ally);
         });
 
-        this.lamps.forEach(lamp => this.clearFogAroundCharacter(lamp, lamp.radius));
-        this.projectiles.forEach(projectile => this.clearFogAroundCharacter(projectile, projectile.glow));
+        this.lamps.forEach(lamp => {
+            this.clearFogAroundCharacter(lamp, lamp.radius);
+        });
+
+        this.projectiles.forEach(projectile => {
+            this.clearFogAroundCharacter(projectile, projectile.glow);
+        });
+
         this.context.drawImage(this.fogCanvas, 0, 0);
     }
 
@@ -308,12 +313,16 @@ class Camera {
 
     update(targetX, targetY) {
         const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
+
         const targetXCenter = targetX - this.viewportWidth / 2;
         const targetYCenter = targetY - this.viewportHeight / 2;
+
         this.x = lerp(this.x, targetXCenter, 0.1);
         this.y = lerp(this.y, targetYCenter, 0.1);
+
         this.x = Math.max(0, Math.min(this.x, this.worldWidth - this.viewportWidth));
         this.y = Math.max(0, Math.min(this.y, this.worldHeight - this.viewportHeight));
+
         this.x = Math.floor(this.x);
         this.y = Math.floor(this.y);
     }
@@ -344,7 +353,7 @@ class Character {
         this.lastShootTime = 0;
     }
 
-    draw(context, camera, debug, light) {
+    draw(context, camera, debug) {
         if (!this.alive && !this.deathAnimationPlayed) {
             this.playDeathAnimation();
             return;
@@ -359,8 +368,8 @@ class Character {
                 context.globalCompositeOperation = 'lighter'; // Heller Effekt
             }
         }
-
-        this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction], light);
+        
+        this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
         context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
         
         if (debug) {
@@ -373,12 +382,14 @@ class Character {
         if (!this.alive) return false;
         const hitboxX = newX + (this.tileSize - this.hitbox.width) / 2;
         const hitboxY = newY + (this.tileSize - this.hitbox.height) / 2;
+
         const corners = [
-            { x: hitboxX, y: hitboxY },
-            { x: hitboxX + this.hitbox.width - 1, y: hitboxY },
-            { x: hitboxX, y: hitboxY + this.hitbox.height - 1 },
-            { x: hitboxX + this.hitbox.width - 1, y: hitboxY + this.hitbox.height - 1 }
+            { x: hitboxX, y: hitboxY },  // Top-left
+            { x: hitboxX + this.hitbox.width - 1, y: hitboxY },  // Top-right
+            { x: hitboxX, y: hitboxY + this.hitbox.height - 1 },  // Bottom-left
+            { x: hitboxX + this.hitbox.width - 1, y: hitboxY + this.hitbox.height - 1 }  // Bottom-right
         ];
+
         for (let corner of corners) {
             const tileX = Math.floor(corner.x / this.tileSize);
             const tileY = Math.floor(corner.y / this.tileSize);
@@ -393,14 +404,18 @@ class Character {
         if (!this.alive) return;
         const currentTime = new Date().getTime();
         if (currentTime - this.lastShootTime < this.shootCooldown) {
-            return;
+            return;  // Cooldown noch nicht abgelaufen
         }
+
         const centerX = this.x + (this.tileSize - this.hitbox.width) / 2 + this.hitbox.width / 2 + offsetX;
         const centerY = this.y + (this.tileSize - this.hitbox.height) / 2 + this.hitbox.height / 2 + offsetY;
+
         targetX += (this.tileSize - this.hitbox.width) / 2 + this.hitbox.width / 2 + offsetX;
         targetY += (this.tileSize - this.hitbox.height) / 2 + this.hitbox.height / 2 + offsetY;
-        const projectile = new Projectile(centerX, centerY, targetX, targetY, this.atk, this, duration);
+
+        const projectile = new Projectile(centerX, centerY, targetX, targetY, this.atk, this, duration, 10);
         projectiles.push(projectile);
+
         this.lastShootTime = currentTime;
     }
 
@@ -408,7 +423,7 @@ class Character {
         if (!this.alive) return;
         this.hp -= damage;
         this.startBlinking();
-        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 10, 1, 30, 'particle_image.png', 4, 32, 32, 100);
+        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 10, 1, 30, 'particle_image.png', 4, 32, 32, 100); // Add hit particles
         if (this.hp <= 0) {
             this.hp = 0;
             this.die();
@@ -417,12 +432,12 @@ class Character {
 
     startBlinking() {
         this.blinking = true;
-        this.blinkDuration = 30;
+        this.blinkDuration = 30; // Set the duration for blinking (e.g., 30 frames)
     }
 
     playDeathAnimation() {
         this.deathAnimationPlayed = true;
-        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 20, 1.5, 60, 'death_particle_image.png', 4, 32, 32, 100);
+        game.addAnimatedParticles(this.x + this.tileSize / 2, this.y + this.tileSize / 2, 20, 1.5, 60, 'death_particle_image.png', 4, 32, 32, 100); // Add death particles
         if (this.deleteOnDeath) {
             game.removeCharacter(this);
         }
@@ -435,9 +450,12 @@ class Character {
     updateDirection(dx, dy) {
         if (!this.alive) return;
         if (dx === 0 && dy === 0) return;
+
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
+
         this.lookVector = { x: dx, y: dy };
+
         if (absDx > 0.5 * this.speed && absDy > 0.5 * this.speed) {
             if (dy < 0) {
                 if (dx < 0) this.direction = 'oben links';
@@ -482,27 +500,27 @@ class Player extends Character {
             {
                 idle: new Animation('player_animations.png', 4, 44, 44, 200, 5),
                 walk: new Animation('player_animations.png', 4, 44, 44, 100, 0),
-                act: new Animation('player_animations.png', 8, 44, 44, 50, 10)
+                act: new Animation('player_animations.png', 8, 44, 44, 50, 10) // act Animation hinzufügen
             },
-            10,
-            100,
-            false
+            10,  // ATK
+            100, // HP
+            false // Player should not be deleted on death
         );
         this.keys = { w: false, a: false, s: false, d: false };
-        this.shooting = false;
-        this.inventory = new Inventory();
+        this.shooting = false; // Flag to check if the player is shooting
+        this.inventory = new Inventory(); // Player inventory
     }
 
     handleKeyDown(event) {
         if (event.key in this.keys) {
             this.keys[event.key] = true;
         }
-        if (event.key === ' ' && !this.shooting) {
+        if (event.key === ' ' && !this.shooting) {  // Leertaste für Schießen
             const currentTime = new Date().getTime();
             if (currentTime - this.lastShootTime >= this.shootCooldown) {
                 this.shooting = true;
-                this.currentAnimation = this.animations.act;
-                this.currentAnimation.currentFrame = 0;
+                this.currentAnimation = this.animations.act; // Set the act animation
+                this.currentAnimation.currentFrame = 0; // Start from the first frame
             }
         }
         this.updateAnimation();
@@ -519,8 +537,10 @@ class Player extends Character {
         if (!this.alive) return;
         let newX = this.x;
         let newY = this.y;
+
         let dx = 0;
         let dy = 0;
+
         if (this.keys['w']) {
             dy -= this.speed;
         }
@@ -533,29 +553,37 @@ class Player extends Character {
         if (this.keys['d']) {
             dx += this.speed;
         }
+
         if (this.canMoveTo(this.x + dx, this.y, tiles, tilesX, tilesY)) {
             this.x += dx;
         }
+
         if (this.canMoveTo(this.x, this.y + dy, tiles, tilesX, tilesY)) {
             this.y += dy;
         }
+
         this.updateDirection(dx, dy);
+
+        // Check for collision with items
         items.forEach(item => {
             if (!item.pickedUp && this.isCollidingWithItem(item)) {
                 this.inventory.addItem(item);
                 item.pickUp();
             }
         });
+
         if (this.shooting && this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 5) {
             const targetX = this.x + this.lookVector.x * this.tileSize * 10;
             const targetY = this.y + this.lookVector.y * this.tileSize * 10;
             this.shootProjectile(game.projectiles, targetX, targetY, 1000, 0, 0);
             this.lastShootTime = new Date().getTime();
         }
+
         if (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d'] || this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === this.currentAnimation.frameCount - 1) {
             this.shooting = false;
             this.updateAnimation();
         }
+
         this.currentAnimation.update();
     }
 
@@ -605,11 +633,11 @@ class Slime extends Character {
             {
                 idle: new Animation('slime_animations.png', 4, 44, 44, 200, 5),
                 move: new Animation('slime_animations.png', 4, 44, 44, 100, 0),
-                act: new Animation('slime_animations.png', 8, 44, 44, 100, 10)
+                act: new Animation('slime_animations.png', 8, 44, 44, 100, 10) // act Animation hinzufügen
             },
-            5,
-            30,
-            true
+            5,  // ATK
+            30, // HP
+            true // Slime should be deleted on death
         );
     }
 
@@ -623,20 +651,26 @@ class Slime extends Character {
             directionY /= distance;
             let newX = this.x + directionX * this.speed;
             let newY = this.y + directionY * this.speed;
+
             this.updateDirection(directionX, directionY);
+
             if (this.canMoveTo(newX, this.y, tiles, tilesX, tilesY)) {
                 this.x = newX;
             }
+
             if (this.canMoveTo(this.x, newY, tiles, tilesX, tilesY)) {
                 this.y = newY;
             }
+
             this.currentAnimation = this.animations.move;
         } else {
             this.currentAnimation = this.animations.idle;
         }
+
         if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
-            this.shootProjectile(game.projectiles, player.x, player.y, 1000, 0, 0);
+            this.shootProjectile(game.projectiles, player.x, player.y, 1000, 0, 0); // Projektil senden
         }
+
         this.currentAnimation.update();
     }
 }
@@ -665,11 +699,11 @@ class Gatherer extends Character {
             {
                 idle: new Animation('gatherer_animations.png', 4, 44, 44, 200, 5),
                 walk: new Animation('gatherer_animations.png', 4, 44, 44, 100, 0),
-                act: new Animation('gatherer_animations.png', 8, 44, 44, 100, 10)
+                act: new Animation('gatherer_animations.png', 8, 44, 44, 100, 10) // act Animation hinzufügen
             },
-            8,
-            50,
-            true
+            8,  // ATK
+            50, // HP
+            true // Gatherer should be deleted on death
         );
         this.path = [];
         this.pathIndex = 0;
@@ -687,6 +721,7 @@ class Gatherer extends Character {
             let directionX = targetX - this.x;
             let directionY = targetY - this.y;
             let distance = Math.sqrt(directionX * directionX + directionY * directionY);
+
             if (distance < 4) {
                 this.pathIndex++;
                 if (this.pathIndex >= this.path.length) {
@@ -698,13 +733,17 @@ class Gatherer extends Character {
                 directionY /= distance;
                 let dx = directionX * this.speed;
                 let dy = directionY * this.speed;
+
                 if (this.canMoveTo(this.x + dx, this.y, tiles, tilesX, tilesY)) {
                     this.x += dx;
                 }
+
                 if (this.canMoveTo(this.x, this.y + dy, tiles, tilesX, tilesY)) {
                     this.y += dy;
                 }
+
                 this.updateDirection(dx, dy);
+
                 if (this.isStuck()) {
                     console.log('Gatherer is stuck, aborting path');
                     this.path = [];
@@ -715,9 +754,11 @@ class Gatherer extends Character {
         } else {
             this.currentAnimation = this.animations.idle;
         }
+
         if (this.currentAnimation === this.animations.act && this.currentAnimation.currentFrame === 2) {
-            this.shootProjectile(game.projectiles, player.x, player.y, 1000, 0, 0);
+            this.shootProjectile(game.projectiles, player.x, player.y, 1000, 0, 0); // Projektil senden
         }
+
         this.currentAnimation.update();
     }
 
@@ -726,7 +767,7 @@ class Gatherer extends Character {
         const end = { x: Math.floor(worldX / this.tileSize), y: Math.floor(worldY / this.tileSize) };
         this.path = astar(tiles, start, end, tilesX, tilesY);
         this.pathIndex = 0;
-        this.stuckCounter = 0;
+        this.stuckCounter = 0; // Reset stuck counter when setting a new waypoint
     }
 
     isStuck() {
@@ -747,16 +788,16 @@ class Projectile {
         this.targetX = targetX;
         this.targetY = targetY;
         this.atk = atk;
-        this.sender = sender;
-        this.speed = 5;
-        this.duration = duration;
+        this.sender = sender; // Sender hinzufügen
+        this.speed = 5;  // Geschwindigkeit des Projektils
+        this.duration = duration; // Dauer des Projektils
         const dx = targetX - x;
         const dy = targetY - y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         this.velocityX = (dx / distance) * this.speed;
         this.velocityY = (dy / distance) * this.speed;
-        this.active = true;
-        this.glow = glow;
+        this.active = true;  // Projektile sind aktiv, solange sie sich bewegen
+        this.glow = glow;  // Projektil soll nicht leuchten
     }
 
     update() {
@@ -782,7 +823,8 @@ class Projectile {
 
     checkCollision(character) {
         if (!this.active) return false;
-        if (character === this.sender) return false;
+        if (character === this.sender) return false;  // Sender ignorieren
+
         const hitboxX = character.x + (character.tileSize - character.hitbox.width) / 2;
         const hitboxY = character.y + (character.tileSize - character.hitbox.height) / 2;
         return (
@@ -802,12 +844,14 @@ class Particle {
         this.velocityY = velocityY;
         this.duration = duration;
         this.active = true;
+
         this.image = new Image();
         this.image.src = imageSrc;
         this.frameCount = frameCount;
         this.frameWidth = frameWidth;
         this.frameHeight = frameHeight;
         this.frameDuration = frameDuration;
+
         this.currentFrame = 0;
         this.elapsedTime = 0;
         this.glow = glow;
@@ -821,7 +865,8 @@ class Particle {
         if (this.duration <= 0) {
             this.active = false;
         }
-        this.elapsedTime += 1000 / 60;
+
+        this.elapsedTime += 1000 / 60;  // Assuming 60 FPS
         if (this.elapsedTime >= this.frameDuration) {
             this.elapsedTime = 0;
             this.currentFrame = (this.currentFrame + 1) % this.frameCount;
@@ -831,17 +876,20 @@ class Particle {
     draw(context, camera) {
         if (!this.active) return;
         const frameX = this.currentFrame * this.frameWidth;
+        
         if (this.glow) {
             context.save();
             context.shadowBlur = 20;
             context.shadowColor = "white";
         }
+
         context.drawImage(
             this.image,
             frameX, 0, this.frameWidth, this.frameHeight,
             this.x - camera.x, this.y - camera.y,
             this.frameWidth, this.frameHeight
         );
+
         if (this.glow) {
             context.restore();
         }
@@ -849,7 +897,7 @@ class Particle {
 }
 
 class Animation {
-    constructor(imageSrc, frameCount, frameWidth, frameHeight, frameDuration, columnOffset = 0, normalMapSrc = null) {
+    constructor(imageSrc, frameCount, frameWidth, frameHeight, frameDuration, columnOffset = 0) {
         this.image = new Image();
         this.image.src = imageSrc;
         this.frameCount = frameCount;
@@ -859,13 +907,6 @@ class Animation {
         this.columnOffset = columnOffset;
         this.currentFrame = 0;
         this.elapsedTime = 0;
-
-        if (normalMapSrc) {
-            this.normalMap = new Image();
-            this.normalMap.src = normalMapSrc;
-        } else {
-            this.normalMap = null;
-        }
     }
 
     update() {
@@ -876,7 +917,7 @@ class Animation {
         }
     }
 
-    draw(context, x, y, direction = 0, light = null) {
+    draw(context, x, y, direction = 0) {
         context.drawImage(
             this.image,
             this.currentFrame * this.frameWidth + this.columnOffset * this.frameWidth,
@@ -888,55 +929,6 @@ class Animation {
             this.frameWidth,
             this.frameHeight
         );
-
-        if (this.normalMap && light) {
-            this.drawWithNormalMap(context, x, y, direction, light);
-        }
-    }
-
-    drawWithNormalMap(context, x, y, direction, light) {
-        const normalMapCanvas = document.createElement('canvas');
-        normalMapCanvas.width = this.frameWidth;
-        normalMapCanvas.height = this.frameHeight;
-        const normalMapContext = normalMapCanvas.getContext('2d');
-
-        normalMapContext.drawImage(
-            this.normalMap,
-            this.currentFrame * this.frameWidth + this.columnOffset * this.frameWidth,
-            direction * this.frameHeight,
-            this.frameWidth,
-            this.frameHeight,
-            0,
-            0,
-            this.frameWidth,
-            this.frameHeight
-        );
-
-        const normalData = normalMapContext.getImageData(0, 0, this.frameWidth, this.frameHeight).data;
-        const imageData = context.getImageData(x, y, this.frameWidth, this.frameHeight);
-
-        const lightX = light.x - x;
-        const lightY = light.y - y;
-        const lightZ = light.z;
-
-        for (let i = 0; i < normalData.length; i += 4) {
-            const nx = normalData[i] / 255 * 2 - 1;
-            const ny = normalData[i + 1] / 255 * 2 - 1;
-            const nz = normalData[i + 2] / 255 * 2 - 1;
-
-            const lx = lightX / lightZ;
-            const ly = lightY / lightZ;
-            const lz = 1;
-
-            const dot = Math.max(0, nx * lx + ny * ly + nz * lz);
-            const shading = dot * light.intensity;
-
-            imageData.data[i] = imageData.data[i] * shading;
-            imageData.data[i + 1] = imageData.data[i + 1] * shading;
-            imageData.data[i + 2] = imageData.data[i + 2] * shading;
-        }
-
-        context.putImageData(imageData, x, y);
     }
 }
 
@@ -958,6 +950,7 @@ class Lamp {
         );
         gradient.addColorStop(0, 'rgba(255, 255, 200, 0.8)');
         gradient.addColorStop(1, 'rgba(255, 255, 200, 0)');
+        
         context.beginPath();
         context.arc(this.x - camera.x, this.y - camera.y, this.radius, 0, Math.PI * 2, false);
         context.fillStyle = gradient;
@@ -1056,30 +1049,39 @@ function astar(grid, start, end, tilesX, tilesY) {
     const cameFrom = {};
     const gScore = {};
     const fScore = {};
+
     openSet.push(start);
     gScore[`${start.x},${start.y}`] = 0;
     fScore[`${start.x},${start.y}`] = heuristic(start, end);
+
     while (openSet.length > 0) {
         let current = openSet.reduce((acc, node) => (fScore[`${node.x},${node.y}`] < fScore[`${acc.x},${acc.y}`] ? node : acc), openSet[0]);
+
         if (current.x === end.x && current.y === end.y) {
             return reconstructPath(cameFrom, current);
         }
+
         openSet.splice(openSet.indexOf(current), 1);
         closedSet.push(current);
+
         getNeighbors(current, tilesX, tilesY).forEach(neighbor => {
             if (closedSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) return;
-            if (grid[neighbor.y][neighbor.x] === 1) return;
+            if (grid[neighbor.y][neighbor.x] === 1) return; // Blockierte Kachel
+
             const tentativeGScore = gScore[`${current.x},${current.y}`] + 1;
+
             if (!openSet.find(n => n.x === neighbor.x && n.y === neighbor.y)) {
                 openSet.push(neighbor);
             } else if (tentativeGScore >= gScore[`${neighbor.x},${neighbor.y}`]) {
                 return;
             }
+
             cameFrom[`${neighbor.x},${neighbor.y}`] = current;
             gScore[`${neighbor.x},${neighbor.y}`] = tentativeGScore;
             fScore[`${neighbor.x},${neighbor.y}`] = gScore[`${neighbor.x},${neighbor.y}`] + heuristic(neighbor, end);
         });
     }
+
     return [];
 }
 
@@ -1115,9 +1117,11 @@ class SimplexNoise {
     buildPermutationTable(seed) {
         const perm = new Uint8Array(512);
         const value = new Uint8Array(256);
+
         for (let i = 0; i < 256; i++) {
             value[i] = i;
         }
+
         seed = seed * 16807 % 2147483647;
         for (let i = 255; i >= 0; i--) {
             seed = seed * 16807 % 2147483647;
@@ -1126,9 +1130,11 @@ class SimplexNoise {
             value[i] = value[r];
             value[r] = temp;
         }
+
         for (let i = 0; i < 512; i++) {
             perm[i] = value[i & 255];
         }
+
         return perm;
     }
 
@@ -1139,8 +1145,11 @@ class SimplexNoise {
             [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1],
             [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]
         ];
+
         const G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+
         let n0, n1, n2;
+
         const s = (xin + yin) * 0.5 * (Math.sqrt(3.0) - 1.0);
         const i = Math.floor(xin + s);
         const j = Math.floor(yin + s);
@@ -1149,40 +1158,47 @@ class SimplexNoise {
         const Y0 = j - t;
         const x0 = xin - X0;
         const y0 = yin - Y0;
+
         let i1, j1;
         if (x0 > y0) { i1 = 1; j1 = 0; } else { i1 = 0; j1 = 1; }
+
         const x1 = x0 - i1 + G2;
         const y1 = y0 - j1 + G2;
         const x2 = x0 - 1.0 + 2.0 * G2;
         const y2 = y0 - 1.0 + 2.0 * G2;
+
         const ii = i & 255;
         const jj = j & 255;
         const gi0 = permMod12[ii + this.perm[jj]];
         const gi1 = permMod12[ii + i1 + this.perm[jj + j1]];
         const gi2 = permMod12[ii + 1 + this.perm[jj + 1]];
+
         let t0 = 0.5 - x0 * x0 - y0 * y0;
         if (t0 < 0) n0 = 0.0;
         else {
             t0 *= t0;
             n0 = t0 * t0 * (grad3[gi0][0] * x0 + grad3[gi0][1] * y0);
         }
+
         let t1 = 0.5 - x1 * x1 - y1 * y1;
         if (t1 < 0) n1 = 0.0;
         else {
             t1 *= t1;
             n1 = t1 * t1 * (grad3[gi1][0] * x1 + grad3[gi1][1] * y1);
         }
+
         let t2 = 0.5 - x2 * x2 - y2 * y2;
         if (t2 < 0) n2 = 0.0;
         else {
             t2 *= t2;
             n2 = t2 * t2 * (grad3[gi2][0] * x2 + grad3[gi2][1] * y2);
         }
+
         return 70.0 * (n0 + n1 + n2);
     }
 }
 
 // Initialization
 window.onload = () => {
-    game = new Game('game', 282345);
+    game = new Game('game', 282345);  // Seed für die Perlin-Noise-Generierung
 };
