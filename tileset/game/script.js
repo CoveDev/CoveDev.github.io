@@ -16,7 +16,7 @@ class Game {
         ];
         this.projectiles = []; // Liste der Projektile
         this.particles = []; // Liste der Partikel
-        this.lamps = [new Lamp(300, 300, 50)]; // Beispiel für eine Lampe
+        this.lamps = [new Lamp(300, 300, 50, true)]; // Beispiel für eine Lampe
         this.items = [new PickableItem(100, 150, 'lamp', true, new Animation('lamp_animation.png', 4, 16, 16, 100))]; // Beispiel für ein pickable Item
         this.tilesetImage = new Image();
         this.tilesetImage.src = 'tileset.png';  // Pfad zum Tileset-Bild
@@ -166,9 +166,9 @@ class Game {
             this.updateItems();
             this.camera.update(this.player.x + this.player.tileSize / 2, this.player.y + this.player.tileSize / 2);
             this.drawTiles();
-            this.player.draw(this.context, this.camera, this.debug);
-            this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug));
-            this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug));
+            this.player.draw(this.context, this.camera, this.debug, this.lamps);
+            this.enemies.forEach(enemy => enemy.draw(this.context, this.camera, this.debug, this.lamps));
+            this.allies.forEach(ally => ally.draw(this.context, this.camera, this.debug, this.lamps));
             this.items.forEach(item => item.draw(this.context, this.camera));
             this.drawProjectiles();
             this.drawParticles();
@@ -329,7 +329,7 @@ class Camera {
 }
 
 class Character {
-    constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations, atk, hp, deleteOnDeath = false) {
+    constructor(tileSize, x, y, hitbox, speed, offsetX, offsetY, direction, directions, animations, atk, hp, deleteOnDeath = false, normalMapSrc = null) {
         this.tileSize = tileSize;
         this.x = x;
         this.y = y;
@@ -341,41 +341,76 @@ class Character {
         this.directions = directions;
         this.animations = animations;
         this.currentAnimation = this.animations.idle;
-        this.atk = atk;  // Angriffskraft
-        this.hp = hp;    // Gesundheitspunkte
-        this.lookVector = { x: 0, y: 1 }; // Blickvektor initialisiert auf unten
-        this.deleteOnDeath = deleteOnDeath; // Soll der Charakter nach dem Tod gelöscht werden
-        this.alive = true; // Status, ob der Charakter lebt
-        this.blinking = false; // Status, ob der Charakter blinkt
-        this.blinkDuration = 0; // Dauer des Blinkens
-        this.deathAnimationPlayed = false; // Status, ob die Sterbeanimation abgespielt wurde
-        this.shootCooldown = 500;  // in Millisekunden, Beispielwert
+        this.atk = atk;
+        this.hp = hp;
+        this.lookVector = { x: 0, y: 1 };
+        this.deleteOnDeath = deleteOnDeath;
+        this.alive = true;
+        this.blinking = false;
+        this.blinkDuration = 0;
+        this.deathAnimationPlayed = false;
+        this.shootCooldown = 500;
         this.lastShootTime = 0;
+
+        this.normalMap = normalMapSrc ? new Image() : null;
+        if (this.normalMap) {
+            this.normalMap.src = normalMapSrc;
+        }
     }
 
-    draw(context, camera, debug) {
+    draw(context, camera, debug, lamps = []) {
         if (!this.alive && !this.deathAnimationPlayed) {
             this.playDeathAnimation();
             return;
         }
+
         const drawX = Math.floor(this.x - camera.x + this.offsetX);
         const drawY = Math.floor(this.y - camera.y + this.offsetY);
-        context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
         
+        context.globalCompositeOperation = 'source-over';
+
         if (this.blinkDuration > 0) {
             this.blinkDuration--;
             if (this.blinkDuration % 10 < 5) {
-                context.globalCompositeOperation = 'lighter'; // Heller Effekt
+                context.globalCompositeOperation = 'lighter';
             }
         }
-        
-        this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
-        context.globalCompositeOperation = 'source-over'; // Standard wiederherstellen
-        
+
+        if (this.normalMap) {
+            this.drawWithLighting(context, drawX, drawY, lamps);
+        } else {
+            this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
+        }
+
+        context.globalCompositeOperation = 'source-over';
+
         if (debug) {
             context.strokeStyle = 'red';
             context.strokeRect(Math.floor(this.x - camera.x + (this.tileSize - this.hitbox.width) / 2), Math.floor(this.y - camera.y + (this.tileSize - this.hitbox.height) / 2), this.hitbox.width, this.hitbox.height);
         }
+    }
+    
+    drawWithLighting(context, drawX, drawY, lamps) {
+        context.save();
+        
+        lamps.forEach(lamp => {
+            if (lamp.affectsNormalMaps) {
+                const distance = Math.sqrt(Math.pow((this.x - lamp.x), 2) + Math.pow((this.y - lamp.y), 2));
+                const maxDistance = lamp.radius;
+                const lightIntensity = Math.max(0, 1 - distance / maxDistance);
+
+                if (lightIntensity > 0) {
+                    const normalMapX = drawX - camera.x;
+                    const normalMapY = drawY - camera.y;
+                    
+                    context.globalAlpha = lightIntensity * 0.5; // Control intensity of normal map effect
+                    context.drawImage(this.normalMap, normalMapX, normalMapY);
+                }
+            }
+        });
+
+        context.restore();
+        this.currentAnimation.draw(context, drawX, drawY, this.directions[this.direction]);
     }
 
     canMoveTo(newX, newY, tiles, tilesX, tilesY) {
@@ -933,10 +968,11 @@ class Animation {
 }
 
 class Lamp {
-    constructor(x, y, radius) {
+    constructor(x, y, radius, affectsNormalMaps = false) {
         this.x = x;
         this.y = y;
         this.radius = radius;
+        this.affectsNormalMaps = affectsNormalMaps;
     }
 
     draw(context, camera) {
