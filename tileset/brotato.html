@@ -11,22 +11,35 @@
             margin: 0 auto;
             background-color: #f0f0f0;
         }
+        #upgrade {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="upgrade">
+        <h2>Choose an Upgrade</h2>
+        <div id="currency">Currency: 0</div>
+        <button id="upgrade1"></button>
+        <button id="upgrade2"></button>
+        <button id="upgrade3"></button>
+    </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
         class Rectangle {
-            constructor(x, y, width, height, hp) {
+            constructor(x, y, width, height, hp, speed) {
                 this.x = x;
                 this.y = y;
                 this.width = width;
                 this.height = height;
                 this.hp = hp;
                 this.maxHp = hp;
+                this.speed = speed;
                 this.active = false;
                 this.spawnTime = 60; // Countdown zur Aktivierung
                 this.hit = false;
@@ -46,6 +59,9 @@
                         ctx.fillStyle = this.getColor();
                     }
                     ctx.fillRect(this.x, this.y, this.width, this.height);
+                    ctx.fillStyle = 'black';
+                    ctx.font = '12px Arial';
+                    ctx.fillText(`${this.hp}/${this.maxHp}`, this.x + this.width / 4, this.y - 10);
                 } else {
                     ctx.fillStyle = 'gray';
                     ctx.fillRect(this.x, this.y, this.width, this.height);
@@ -78,9 +94,13 @@
                 }
                 if (this.active) {
                     const angle = Math.atan2(playerY - this.y, playerX - this.x);
-                    this.x += Math.cos(angle) * 1.5; // Langsamer als vorher
-                    this.y += Math.sin(angle) * 1.5; // Langsamer als vorher
+                    this.x += Math.cos(angle) * this.speed;
+                    this.y += Math.sin(angle) * this.speed;
                 }
+            }
+
+            dropCurrency() {
+                return new Currency(this.x + this.width / 2, this.y + this.height / 2);
             }
         }
 
@@ -91,28 +111,64 @@
                 this.width = 20;
                 this.height = 20;
                 this.speed = 5;
+                this.projectileSpeed = 7;
+                this.damage = 20;
+                this.maxHp = 100;
+                this.hp = 100;
+                this.currency = 0;
+                this.movement = { up: false, down: false, left: false, right: false };
             }
 
             draw() {
                 ctx.fillStyle = 'blue';
                 ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.fillStyle = 'black';
+                ctx.font = '12px Arial';
+                ctx.fillText(`HP: ${this.hp}/${this.maxHp}`, this.x - 10, this.y - 10);
+                ctx.fillText(`Currency: ${this.currency}`, this.x - 10, this.y + 30);
             }
 
-            move(dx, dy) {
-                this.x += dx;
-                this.y += dy;
+            move() {
+                if (this.movement.up) this.y -= this.speed;
+                if (this.movement.down) this.y += this.speed;
+                if (this.movement.left) this.x -= this.speed;
+                if (this.movement.right) this.x += this.speed;
+            }
+
+            takeDamage(damage) {
+                this.hp -= damage;
+                if (this.hp < 0) this.hp = 0;
+            }
+
+            upgrade(type) {
+                switch (type) {
+                    case 'speed':
+                        this.speed += 1;
+                        break;
+                    case 'projectileSpeed':
+                        this.projectileSpeed += 2;  // Buff the projectile speed upgrade
+                        break;
+                    case 'damage':
+                        this.damage += 5;
+                        break;
+                }
+            }
+
+            collectCurrency(currency) {
+                this.currency += currency.value;
             }
         }
 
         class Projectile {
-            constructor(x, y, targetX, targetY) {
+            constructor(x, y, targetX, targetY, speed, damage) {
                 this.x = x;
                 this.y = y;
                 this.width = 5;
                 this.height = 5;
                 const angle = Math.atan2(targetY - y, targetX - x);
-                this.speedX = Math.cos(angle) * 7;
-                this.speedY = Math.sin(angle) * 7;
+                this.speedX = Math.cos(angle) * speed;
+                this.speedY = Math.sin(angle) * speed;
+                this.damage = damage;
                 this.active = true;
             }
 
@@ -130,67 +186,211 @@
             }
         }
 
-        let rectangles = [
-            new Rectangle(100, 100, 80, 80, 50),
-            new Rectangle(300, 200, 80, 80, 50),
-            new Rectangle(500, 300, 80, 80, 50),
-        ];
+        class Currency {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 10;
+                this.height = 10;
+                this.value = 1;
+            }
 
+            draw() {
+                ctx.fillStyle = 'gold';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            isCollected(playerX, playerY, playerWidth, playerHeight) {
+                return playerX < this.x + this.width &&
+                       playerX + playerWidth > this.x &&
+                       playerY < this.y + this.height &&
+                       playerY + playerHeight > this.y;
+            }
+        }
+
+        let rectangles = [];
+        let currencies = [];
+        let round = 0;  // Start at round 0, so first call to nextRound() sets it to 1
+        let timeLeft = 30;
+        let lastTime = Date.now();
         const player = new Player(400, 300);
         let projectiles = [];
+        let enemySpawnInterval;
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             rectangles.forEach(rect => rect.draw());
+            currencies.forEach(currency => currency.draw());
             player.draw();
             projectiles.forEach(proj => proj.draw());
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Round: ${round}`, 10, 20);
+            ctx.fillText(`Time left: ${Math.ceil(timeLeft)}`, 10, 50);
         }
 
         function update() {
+            const now = Date.now();
+            const deltaTime = (now - lastTime) / 1000;
+            lastTime = now;
+
+            timeLeft -= deltaTime;
+
+            player.move();
+
             projectiles.forEach(proj => {
                 proj.update();
                 rectangles.forEach(rect => {
                     if (proj.active && rect.active && rect.isHit(proj.x, proj.y)) {
-                        rect.takeDamage(20);
+                        rect.takeDamage(proj.damage);
                         proj.active = false;
+                        if (rect.hp <= 0) {
+                            currencies.push(rect.dropCurrency());
+                        }
                     }
                 });
             });
             projectiles = projectiles.filter(proj => proj.active);
             rectangles = rectangles.filter(rect => rect.hp > 0);
-            rectangles.forEach(rect => rect.update(player.x, player.y));
+            rectangles.forEach(rect => {
+                rect.update(player.x, player.y);
+                if (rect.active && rect.isHit(player.x, player.y)) {
+                    player.takeDamage(5);
+                }
+            });
+
+            currencies = currencies.filter(currency => {
+                if (currency.isCollected(player.x, player.y, player.width, player.height)) {
+                    player.collectCurrency(currency);
+                    return false;
+                }
+                return true;
+            });
+
+            if (player.hp <= 0) {
+                endGame();
+            }
+
+            if (timeLeft <= 0) {
+                endRound();
+            }
+        }
+
+        function endRound() {
+            clearInterval(timer);
+            clearInterval(enemySpawnInterval);
+            showUpgradeOptions();
+        }
+
+        function endGame() {
+            clearInterval(timer);
+            clearInterval(enemySpawnInterval);
+            alert("Game Over");
         }
 
         function spawnRectangle() {
             const x = Math.random() * (canvas.width - 80);
             const y = Math.random() * (canvas.height - 80);
-            const newRectangle = new Rectangle(x, y, 80, 80, 50);
+            const hp = 50 + round * 10;
+            const speed = 1 + round * 0.1;
+            const newRectangle = new Rectangle(x, y, 80, 80, hp, speed);
             rectangles.push(newRectangle);
+        }
+
+        function getRandomUpgrade() {
+            const upgrades = [
+                { type: 'speed', description: 'Increase Speed', cost: 3, penalty: 'Decrease Damage' },
+                { type: 'projectileSpeed', description: 'Increase Projectile Speed', cost: 3, penalty: 'Decrease Speed' },
+                { type: 'damage', description: 'Increase Damage', cost: 3, penalty: 'Decrease Max HP' },
+            ];
+            return upgrades[Math.floor(Math.random() * upgrades.length)];
+        }
+
+        function showUpgradeOptions() {
+            const upgradeDiv = document.getElementById('upgrade');
+            const upgrade1 = document.getElementById('upgrade1');
+            const upgrade2 = document.getElementById('upgrade2');
+            const upgrade3 = document.getElementById('upgrade3');
+
+            const upgradeOptions = [getRandomUpgrade(), getRandomUpgrade(), getRandomUpgrade()];
+            upgrade1.textContent = `${upgradeOptions[0].description} (Cost: ${upgradeOptions[0].cost}) - ${upgradeOptions[0].penalty}`;
+            upgrade2.textContent = `${upgradeOptions[1].description} (Cost: ${upgradeOptions[1].cost}) - ${upgradeOptions[1].penalty}`;
+            upgrade3.textContent = `${upgradeOptions[2].description} (Cost: ${upgradeOptions[2].cost}) - ${upgradeOptions[2].penalty}`;
+
+            upgrade1.onclick = () => chooseUpgrade(upgradeOptions[0]);
+            upgrade2.onclick = () => chooseUpgrade(upgradeOptions[1]);
+            upgrade3.onclick = () => chooseUpgrade(upgradeOptions[2]);
+
+            document.getElementById('currency').textContent = `Currency: ${player.currency}`;
+            upgradeDiv.style.display = 'block';
+        }
+
+        function chooseUpgrade(option) {
+            if (player.currency >= option.cost) {
+                player.currency -= option.cost;
+                player.upgrade(option.type);
+                applyPenalty(option.penalty);
+            }
+            const upgradeDiv = document.getElementById('upgrade');
+            upgradeDiv.style.display = 'none';
+            nextRound();
+        }
+
+        function applyPenalty(penalty) {
+            switch (penalty) {
+                case 'Decrease Speed':
+                    player.speed = Math.max(1, player.speed - 1);
+                    break;
+                case 'Decrease Damage':
+                    player.damage = Math.max(1, player.damage - 5);
+                    break;
+                case 'Decrease Max HP':
+                    player.maxHp = Math.max(10, player.maxHp - 10);
+                    if (player.hp > player.maxHp) {
+                        player.hp = player.maxHp;
+                    }
+                    break;
+            }
+        }
+
+        function nextRound() {
+            round++;
+            timeLeft = 30;
+            rectangles = [];
+            currencies = [];
+            lastTime = Date.now();
+            enemySpawnInterval = setInterval(spawnRectangle, 3000 / round); // Gegner spawnen häufiger mit jeder Runde
+            timer = setInterval(gameLoop, 1000 / 60);
         }
 
         function gameLoop() {
             update();
             draw();
-            requestAnimationFrame(gameLoop);
         }
 
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'w') player.move(0, -player.speed);
-            if (e.key === 'a') player.move(-player.speed, 0);
-            if (e.key === 's') player.move(0, player.speed);
-            if (e.key === 'd') player.move(player.speed, 0);
+            if (e.key === 'w') player.movement.up = true;
+            if (e.key === 'a') player.movement.left = true;
+            if (e.key === 's') player.movement.down = true;
+            if (e.key === 'd') player.movement.right = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'w') player.movement.up = false;
+            if (e.key === 'a') player.movement.left = false;
+            if (e.key === 's') player.movement.down = false;
+            if (e.key === 'd') player.movement.right = false;
         });
 
         canvas.addEventListener('click', (e) => {
             const rect = canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
-            projectiles.push(new Projectile(player.x + player.width / 2, player.y + player.height / 2, mouseX, mouseY));
+            projectiles.push(new Projectile(player.x + player.width / 2, player.y + player.height / 2, mouseX, mouseY, player.projectileSpeed, player.damage));
         });
 
-        setInterval(spawnRectangle, 3000); // Spawnt alle 3 Sekunden ein neues Rechteck
-
-        gameLoop();
+        // Start the first round immediately
+        nextRound();
     </script>
 </body>
 </html>
