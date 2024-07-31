@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brotato Gamefeel Simulation</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 0 auto;
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        class Rectangle {
+            constructor(x, y, width, height, hp) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.hp = hp;
+                this.maxHp = hp;
+                this.active = false;
+                this.spawnTime = 60; // Countdown zur Aktivierung
+                this.hit = false;
+                this.hitTime = 0;
+            }
+
+            draw() {
+                if (this.active) {
+                    if (this.hit) {
+                        ctx.fillStyle = 'white';
+                        this.hitTime++;
+                        if (this.hitTime > 10) {
+                            this.hit = false;
+                            this.hitTime = 0;
+                        }
+                    } else {
+                        ctx.fillStyle = this.getColor();
+                    }
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                } else {
+                    ctx.fillStyle = 'gray';
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
+            }
+
+            getColor() {
+                const damageRatio = this.hp / this.maxHp;
+                const red = Math.floor(255 * (1 - damageRatio));
+                const green = Math.floor(255 * damageRatio);
+                return `rgb(${red},${green},0)`;
+            }
+
+            isHit(x, y) {
+                return x > this.x && x < this.x + this.width && y > this.y && y < this.y + this.height;
+            }
+
+            takeDamage(damage) {
+                this.hp -= damage;
+                if (this.hp < 0) this.hp = 0;
+                this.hit = true;
+            }
+
+            update(playerX, playerY) {
+                if (this.spawnTime > 0) {
+                    this.spawnTime--;
+                    if (this.spawnTime === 0) {
+                        this.active = true;
+                    }
+                }
+                if (this.active) {
+                    const angle = Math.atan2(playerY - this.y, playerX - this.x);
+                    this.x += Math.cos(angle) * 1.5; // Langsamer als vorher
+                    this.y += Math.sin(angle) * 1.5; // Langsamer als vorher
+                }
+            }
+        }
+
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 20;
+                this.height = 20;
+                this.speed = 5;
+            }
+
+            draw() {
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            move(dx, dy) {
+                this.x += dx;
+                this.y += dy;
+            }
+        }
+
+        class Projectile {
+            constructor(x, y, targetX, targetY) {
+                this.x = x;
+                this.y = y;
+                this.width = 5;
+                this.height = 5;
+                const angle = Math.atan2(targetY - y, targetX - x);
+                this.speedX = Math.cos(angle) * 7;
+                this.speedY = Math.sin(angle) * 7;
+                this.active = true;
+            }
+
+            draw() {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+                    this.active = false;
+                }
+            }
+        }
+
+        let rectangles = [
+            new Rectangle(100, 100, 80, 80, 50),
+            new Rectangle(300, 200, 80, 80, 50),
+            new Rectangle(500, 300, 80, 80, 50),
+        ];
+
+        const player = new Player(400, 300);
+        let projectiles = [];
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            rectangles.forEach(rect => rect.draw());
+            player.draw();
+            projectiles.forEach(proj => proj.draw());
+        }
+
+        function update() {
+            projectiles.forEach(proj => {
+                proj.update();
+                rectangles.forEach(rect => {
+                    if (proj.active && rect.active && rect.isHit(proj.x, proj.y)) {
+                        rect.takeDamage(20);
+                        proj.active = false;
+                    }
+                });
+            });
+            projectiles = projectiles.filter(proj => proj.active);
+            rectangles = rectangles.filter(rect => rect.hp > 0);
+            rectangles.forEach(rect => rect.update(player.x, player.y));
+        }
+
+        function spawnRectangle() {
+            const x = Math.random() * (canvas.width - 80);
+            const y = Math.random() * (canvas.height - 80);
+            const newRectangle = new Rectangle(x, y, 80, 80, 50);
+            rectangles.push(newRectangle);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'w') player.move(0, -player.speed);
+            if (e.key === 'a') player.move(-player.speed, 0);
+            if (e.key === 's') player.move(0, player.speed);
+            if (e.key === 'd') player.move(player.speed, 0);
+        });
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            projectiles.push(new Projectile(player.x + player.width / 2, player.y + player.height / 2, mouseX, mouseY));
+        });
+
+        setInterval(spawnRectangle, 3000); // Spawnt alle 3 Sekunden ein neues Rechteck
+
+        gameLoop();
+    </script>
+</body>
+</html>

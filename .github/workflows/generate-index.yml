@@ -1,6 +1,8 @@
 name: Generate Index Page
 
-on: push
+on:
+  workflow_dispatch:
+    inputs:
 
 jobs:
   build:
