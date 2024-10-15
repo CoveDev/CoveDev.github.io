@@ -19,30 +19,34 @@
   <h2>Spritesheet Animation</h2>
   <input type="file" id="spritesheetInput" accept="image/*">
   <br>
-  <label for="frameWidthRange">Breite eines Frames:</label>
-  <input type="range" id="frameWidthRange" min="1" max="500" value="100">
+  <label for="frameWidthInput">Breite eines Frames:</label>
+  <input type="number" id="frameWidthInput" min="1" max="500" value="100">
   <span id="frameWidthDisplay">100</span>px
   <br>
   <canvas id="animationCanvas" width="500" height="300"></canvas>
 
   <script>
     const fileInput = document.getElementById('spritesheetInput');
-    const frameWidthRange = document.getElementById('frameWidthRange');
+    const frameWidthInput = document.getElementById('frameWidthInput');
     const frameWidthDisplay = document.getElementById('frameWidthDisplay');
     const canvas = document.getElementById('animationCanvas');
     const ctx = canvas.getContext('2d');
-    
+
     let spritesheet = null;
-    let frameWidth = parseInt(frameWidthRange.value);
+    let frameWidth = parseInt(frameWidthInput.value);
     let currentFrame = 0;
     let numberOfFrames = 1;
+    let fps = 12; // 12 frames per second
+    let interval = 1000 / fps;
+    let lastTime = 0;
 
-    // Event listener to update the frame width from the range input
-    frameWidthRange.addEventListener('input', (e) => {
+    // Event listener to update the frame width from the number input
+    frameWidthInput.addEventListener('input', (e) => {
       frameWidth = parseInt(e.target.value);
       frameWidthDisplay.textContent = frameWidth;
       if (spritesheet) {
         numberOfFrames = Math.floor(spritesheet.width / frameWidth);
+        currentFrame = 0; // Reset frame to 0 when frame width changes
       }
     });
 
@@ -55,27 +59,33 @@
         img.onload = () => {
           spritesheet = img;
           numberOfFrames = Math.floor(spritesheet.width / frameWidth);
-          animate();
+          currentFrame = 0; // Reset frame to 0 when new spritesheet is loaded
+          lastTime = performance.now(); // Reset timing for the animation
+          animate(lastTime);
         };
       }
     });
 
-    // Animation loop
-    function animate() {
-      if (spritesheet) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(
-          spritesheet,
-          currentFrame * frameWidth, // x position in spritesheet
-          0, // y position in spritesheet
-          frameWidth, // width of one frame
-          spritesheet.height, // height of the spritesheet
-          0, // x position on canvas
-          0, // y position on canvas
-          frameWidth, // draw width on canvas
-          spritesheet.height // draw height on canvas
-        );
-        currentFrame = (currentFrame + 1) % numberOfFrames;
+    // Animation loop with 12 FPS
+    function animate(time) {
+      const deltaTime = time - lastTime;
+      if (deltaTime > interval) {
+        if (spritesheet) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(
+            spritesheet,
+            currentFrame * frameWidth, // x position in spritesheet
+            0, // y position in spritesheet
+            frameWidth, // width of one frame
+            spritesheet.height, // height of the spritesheet
+            0, // x position on canvas
+            0, // y position on canvas
+            frameWidth, // draw width on canvas
+            spritesheet.height // draw height on canvas
+          );
+          currentFrame = (currentFrame + 1) % numberOfFrames;
+        }
+        lastTime = time; // Update last frame time
       }
       requestAnimationFrame(animate);
     }
