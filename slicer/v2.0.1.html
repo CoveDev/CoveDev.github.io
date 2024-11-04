@@ -41,7 +41,7 @@
     #uploadButton {
       margin-top: 10px;
     }
-    #darkModeToggle, #createGifButton {
+    #darkModeToggle {
       margin-top: 10px;
       display: block;
     }
@@ -78,9 +78,7 @@
   <input type="file" id="fileInput" accept="image/*" hidden>
   <button id="uploadButton">Upload an Image</button>
   <button id="darkModeToggle">Toggle Dark Mode</button>
-  <button id="createGifButton">Create GIF from Selected Layers</button>
 
-  <script src="https://cdn.jsdelivr.net/npm/gif.js/dist/gif.min.js"></script>
   <script>
     const rightCanvasContainer = document.getElementById('rightCanvasContainer');
     const rightCanvas = document.getElementById('rightCanvas');
@@ -90,7 +88,6 @@
     const fileInput = document.getElementById('fileInput');
     const uploadButton = document.getElementById('uploadButton');
     const darkModeToggle = document.getElementById('darkModeToggle');
-    const createGifButton = document.getElementById('createGifButton');
 
     let uploadedImage = null; // Store the uploaded image
     let animationInterval = null; // Store the interval ID for animation
@@ -234,41 +231,6 @@
     // Dark mode toggle functionality
     darkModeToggle.addEventListener('click', () => {
       document.body.classList.toggle('dark-mode');
-    });
-
-    // Create GIF button functionality
-    createGifButton.addEventListener('click', () => {
-      if (toggledRows.size === 0 || !uploadedImage) return; // If no rows are selected or no image is uploaded, do nothing
-
-      const gif = new GIF({
-        workers: 2,
-        quality: 10,
-        workerScript: 'https://cdn.jsdelivr.net/npm/gif.js/dist/gif.worker.js'
-      });
-
-      let tileX = 0;
-      while (tileX < rightCanvas.width) {
-        const leftCtx = leftCanvas.getContext('2d');
-        leftCtx.clearRect(0, 0, leftCanvas.width, leftCanvas.height);
-
-        const sortedRows = Array.from(toggledRows).sort((a, b) => a - b);
-        sortedRows.forEach((rowY) => {
-          leftCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, 0, 0, leftCanvas.width, leftCanvas.height);
-        });
-
-        gif.addFrame(leftCanvas, {copy: true, delay: 1000 / 12});
-        tileX += 44;
-      }
-
-      gif.on('finished', function(blob) {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'animation.gif';
-        link.click();
-      });
-
-      gif.render();
     });
   </script>
 </body>
