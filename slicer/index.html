@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Canvas Drag and Drop Image Upload</title>
   <style>
+    body {
+      transition: background-color 0.3s, color 0.3s;
+    }
     #leftCanvas {
       border: 1px solid #000;
       width: 44px;
@@ -38,6 +41,28 @@
     #uploadButton {
       margin-top: 10px;
     }
+    #darkModeToggle {
+      margin-top: 10px;
+      display: block;
+    }
+
+    /* Dark mode styles */
+    body.dark-mode {
+      background-color: #333;
+      color: #fff;
+    }
+    body.dark-mode #leftCanvas,
+    body.dark-mode #zoomedCanvas,
+    body.dark-mode #zoomed4xCanvas,
+    body.dark-mode #rightCanvas {
+      border-color: #fff;
+    }
+    body.dark-mode #rightCanvasContainer {
+      border-color: #666;
+    }
+    body.dark-mode #rightCanvasContainer.hover {
+      border-color: #fff;
+    }
   </style>
 </head>
 <body>
@@ -52,6 +77,7 @@
   </div>
   <input type="file" id="fileInput" accept="image/*" hidden>
   <button id="uploadButton">Upload an Image</button>
+  <button id="darkModeToggle">Toggle Dark Mode</button>
 
   <script>
     const rightCanvasContainer = document.getElementById('rightCanvasContainer');
@@ -61,6 +87,7 @@
     const zoomed4xCanvas = document.getElementById('zoomed4xCanvas');
     const fileInput = document.getElementById('fileInput');
     const uploadButton = document.getElementById('uploadButton');
+    const darkModeToggle = document.getElementById('darkModeToggle');
 
     let uploadedImage = null; // Store the uploaded image
     let animationInterval = null; // Store the interval ID for animation
@@ -199,6 +226,11 @@
 
       // Start the animation at 1/12 second intervals
       animationInterval = setInterval(drawNextFrame, 1000 / 12);
+    });
+
+    // Dark mode toggle functionality
+    darkModeToggle.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
     });
   </script>
 </body>
