@@ -47,6 +47,8 @@
     }
     #hiddenCanvas {
       display: none;
+      width: 176px;
+      height: 176px;
     }
 
     /* Dark mode styles */
@@ -83,7 +85,7 @@
   <button id="uploadButton">Upload an Image</button>
   <button id="darkModeToggle">Toggle Dark Mode</button>
   <button id="generateGifButton">Generate GIF</button>
-  <canvas id="hiddenCanvas" width="44" height="44"></canvas>
+  <canvas id="hiddenCanvas" width="176" height="176"></canvas>
 
   <script>
     const rightCanvasContainer = document.getElementById('rightCanvasContainer');
@@ -249,8 +251,6 @@
       const gif = new GIF({
         workers: 2,
         quality: 10,
-        width: 44,
-        height: 44,
         workerScript: 'gif.worker.js'
       });
 
