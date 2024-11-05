@@ -249,6 +249,8 @@
       const gif = new GIF({
         workers: 2,
         quality: 10,
+        width: 44,
+        height: 44,
         workerScript: 'gif.worker.js'
       });
 
@@ -256,11 +258,15 @@
       hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
 
       let tileX = 0;
+      const sortedRows = Array.from(toggledRows).sort((a, b) => a - b);
       while (tileX < rightCanvas.width) {
-        hiddenCtx.drawImage(uploadedImage, tileX, 0, 44, 44, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-        gif.addFrame(hiddenCanvas, { copy: true, width: hiddenCanvas.width, height: hiddenCanvas.height, delay: 1000 / 12 });
+        sortedRows.forEach((rowY) => {
+          // Draw the selected row from the uploaded image to the hidden canvas
+          hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+          hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+          gif.addFrame(hiddenCanvas, { copy: true, width: hiddenCanvas.width, height: hiddenCanvas.height, delay: 1000 / 12 });
+        });
         tileX += 44;
-        hiddenCtx.clearRect(0,0,44,44)
       }
 
       gif.on('finished', (blob) => {
