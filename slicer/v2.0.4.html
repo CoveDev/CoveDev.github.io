@@ -256,7 +256,9 @@
       });
 
       const hiddenCtx = hiddenCanvas.getContext('2d');
+      hiddenCtx.imageSmoothingEnabled = false;  // Disable smoothing for crisp pixel art rendering
       hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+      hiddenCtx.imageSmoothingEnabled = false;  // Ensure smoothing is disabled for each draw operation
 
       let mainSize = 176
       
