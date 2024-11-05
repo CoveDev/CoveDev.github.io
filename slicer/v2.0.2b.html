@@ -46,7 +46,7 @@
       display: block;
     }
     #hiddenCanvas {
-      display: block;
+      display: none;
       width: 352px;
       height: 352px;
       image-rendering: pixelated; /* Ensures crisp rendering for pixel art */
@@ -256,9 +256,7 @@
       });
 
       const hiddenCtx = hiddenCanvas.getContext('2d');
-      hiddenCtx.imageSmoothingEnabled = false;  // Disable smoothing for crisp pixel art rendering
       hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-      hiddenCtx.imageSmoothingEnabled = false;  // Ensure smoothing is disabled for each draw operation
 
       let mainSize = 176
       
@@ -267,8 +265,6 @@
       let targetY = 0;
       const sortedRows = Array.from(toggledRows).sort((a, b) => a - b);
       // draw something on the right side of the main animation, stationary, basically every frame selected
-      hiddenCtx.fillStyle = "white";
-      hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
       while (tileX < rightCanvas.width) {
         sortedRows.forEach((rowY) => {
           hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, mainSize+targetX, targetY, 44, 44);
@@ -284,9 +280,7 @@
       tileX = 0;
       // main animation: emulate leftCanvas, merge every selected row and put every frame into a gif
       while (tileX < rightCanvas.width) {
-        //hiddenCtx.clearRect(0, 88, mainSize, mainSize);
-        hiddenCtx.fillStyle = "white";
-        hiddenCtx.fillRect(0, 88, mainSize, mainSize);
+        hiddenCtx.clearRect(0, 88, mainSize, mainSize);
         sortedRows.forEach((rowY) => {
           // Draw the selected row from the uploaded image to the hidden canvas
           hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, 0, 88, mainSize, mainSize);
@@ -297,19 +291,10 @@
 
       gif.on('finished', (blob) => {
         const url = URL.createObjectURL(blob);
-        const gifImage = document.createElement('img');
-        gifImage.src = url;
-        gifImage.style.width = '352px';
-        gifImage.style.height = '352px';
-        gifImage.style.marginLeft = '20px';
-        gifImage.style.cursor = 'pointer';
-        gifImage.addEventListener('click', () => {
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = 'animation.gif';
-          link.click();
-        });
-        zoomed4xCanvas.insertAdjacentElement('afterend', gifImage);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'animation.gif';
+        link.click();
       });
 
       gif.render();
