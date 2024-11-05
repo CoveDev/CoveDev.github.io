@@ -39,12 +39,14 @@
 
         function generateGif() {
             // GIF.js Instanz mit Spezifikationen erstellen
-            const gif = new GIF({
-                workers: 2,
-                quality: 10,
-                width: 100,  // Breite des GIFs basierend auf den Crop-Abmessungen
-                height: 100  // Höhe des GIFs basierend auf den Crop-Abmessungen
-            });
+			const gif = new GIF({
+				workers: 2,
+				quality: 10,
+				workerScript: 'gif.worker.js', // Pfad zur Worker-Datei
+				width: 100,
+				height: 100
+			});
+
 
             // Jeden Crop als Frame zum GIF hinzufügen
             crops.forEach(crop => {
