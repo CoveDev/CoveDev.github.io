@@ -47,8 +47,8 @@
     }
     #hiddenCanvas {
       display: none;
-      width: 350px;
-      height: 176px;
+      width: 352px;
+      height: 352px;
       image-rendering: pixelated; /* Ensures crisp rendering for pixel art */
     }
 
@@ -280,10 +280,10 @@
       tileX = 0;
       // main animation: emulate leftCanvas, merge every selected row and put every frame into a gif
       while (tileX < rightCanvas.width) {
-        hiddenCtx.clearRect(0, 0, mainSize, mainSize);
+        hiddenCtx.clearRect(0, 88, mainSize, mainSize);
         sortedRows.forEach((rowY) => {
           // Draw the selected row from the uploaded image to the hidden canvas
-          hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, 0, 0, mainSize, mainSize);
+          hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, 0, 88, mainSize, mainSize);
         });
         gif.addFrame(hiddenCanvas, { copy: true, width: hiddenCanvas.width, height: hiddenCanvas.height, delay: 1000 / 12 });
         tileX += 44;
