@@ -291,10 +291,19 @@
 
       gif.on('finished', (blob) => {
         const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'animation.gif';
-        link.click();
+        const gifImage = document.createElement('img');
+        gifImage.src = url;
+        gifImage.style.width = '352px';
+        gifImage.style.height = '352px';
+        gifImage.style.marginLeft = '20px';
+        gifImage.style.cursor = 'pointer';
+        gifImage.addEventListener('click', () => {
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'animation.gif';
+          link.click();
+        });
+        zoomed4xCanvas.insertAdjacentElement('afterend', gifImage);
       });
 
       gif.render();
