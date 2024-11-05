@@ -260,6 +260,7 @@
         hiddenCtx.drawImage(uploadedImage, tileX, 0, 44, 44, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
         gif.addFrame(hiddenCanvas, { copy: true, width: hiddenCanvas.width, height: hiddenCanvas.height, delay: 1000 / 12 });
         tileX += 44;
+        hiddenCtx.clearRect(0,0,44,44)
       }
 
       gif.on('finished', (blob) => {
