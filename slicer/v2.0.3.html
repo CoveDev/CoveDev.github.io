@@ -267,14 +267,14 @@
       // draw something on the right side of the main animation, stationary, basically every frame selected
       while (tileX < rightCanvas.width) {
         sortedRows.forEach((rowY) => {
-          targetX += 44
-          if (targetX > 44*4) {
-            targetX = 0
-            targetY += 44
-          }
           hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, mainSize+targetX, targetY, 44, 44);
         });
         tileX += 44;
+        targetX += 44;
+        if (targetX > 44*4) {
+          targetX = 0;
+          targetY += 44;
+        }
       }
       
       tileX = 0;
