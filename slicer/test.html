@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Crop to GIF Generator (Client-Side)</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+</head>
+<body>
+    <h1>Canvas Crop to GIF Generator (Client-Side)</h1>
+    <canvas id="spritesheetCanvas" width="500" height="500"></canvas>
+    <br>
+    <button onclick="addCrop(50, 50, 100, 100)">Add Crop (50, 50, 100, 100)</button>
+    <button onclick="addCrop(200, 200, 100, 100)">Add Crop (200, 200, 100, 100)</button>
+    <button onclick="generateGif()">Generate GIF from Selected Crops</button>
+    <script>
+        // Zeichnung auf der Canvas vorbereiten
+        const canvas = document.getElementById('spritesheetCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'lightblue';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'red';
+        ctx.fillRect(50, 50, 100, 100);
+        ctx.fillStyle = 'green';
+        ctx.fillRect(200, 200, 100, 100);
+
+        // Array zur Speicherung der Crop-Koordinaten
+        const crops = [];
+
+        function addCrop(x, y, width, height) {
+            crops.push({ x, y, width, height });
+            console.log(`Added crop: (${x}, ${y}, ${width}, ${height})`);
+        }
+
+        function generateGif() {
+            // GIF.js Instanz mit Spezifikationen erstellen
+            const gif = new GIF({
+                workers: 2,
+                quality: 10,
+                width: 100,  // Breite des GIFs basierend auf den Crop-Abmessungen
+                height: 100  // Höhe des GIFs basierend auf den Crop-Abmessungen
+            });
+
+            // Jeden Crop als Frame zum GIF hinzufügen
+            crops.forEach(crop => {
+                const croppedCanvas = document.createElement('canvas');
+                const croppedContext = croppedCanvas.getContext('2d');
+                croppedCanvas.width = crop.width;
+                croppedCanvas.height = crop.height;
+
+                // Den spezifischen Crop-Bereich auf das temporäre Canvas zeichnen
+                croppedContext.drawImage(canvas, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+
+                // Frame zur GIF-Instanz hinzufügen
+                gif.addFrame(croppedContext, { copy: true, delay: 500 }); // Anpassbare Verzögerung
+            });
+
+            // Start der GIF-Erstellung und Download des Ergebnisses
+            gif.on('finished', blob => {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'generated_sprite.gif';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            });
+
+            gif.render();
+        }
+    </script>
+</body>
+</html>
