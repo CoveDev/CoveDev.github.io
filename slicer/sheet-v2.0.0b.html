@@ -125,32 +125,36 @@
       ctx.imageSmoothingEnabled = false;
       for (let y = 0; y < image.height; y += tileHeight) {
         for (let x = 0; x < image.width; x += tileWidth) {
-          // Draw each tile on the canvas
+          // Draw the entire original spritesheet first
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = 'white';
           ctx.fillRect(0, 0, canvas.width, canvas.height); // Set background to white
-          ctx.drawImage(image, x, y, tileWidth, tileHeight, 0, 0, tileWidth * 4, tileHeight * 4);
+          ctx.drawImage(image, 0, 0);
+
+          // Draw each tile on top of the original spritesheet
+          ctx.drawImage(image, x, y, tileWidth, tileHeight, canvas.width, 0, tileWidth, tileHeight);
           
-          // Check if the current frame has any content
-          const frameData = ctx.getImageData(0, 0, tileWidth * 4, tileHeight * 4);
-          const hasContent = frameData.data.some((value) => value !== 255); // Check if there's any non-white pixel
+          // Create a larger canvas to combine both original spritesheet and the tile
+          const combinedCanvas = document.createElement('canvas');
+          combinedCanvas.width = canvas.width + tileWidth * 4;
+          combinedCanvas.height = Math.max(canvas.height, tileHeight * 4);
+          const combinedCtx = combinedCanvas.getContext('2d');
+          combinedCtx.imageSmoothingEnabled = false;
+
+          // Draw original spritesheet
+          combinedCtx.drawImage(canvas, 0, 0);
           
-          // Add frame to GIF only if it has content
-          if (hasContent) {
-            gif.addFrame(frameData, {copy: true, delay: 200});
-          }
+          // Draw the scaled tile next to the spritesheet
+          combinedCtx.drawImage(canvas, canvas.width, 0, tileWidth * 4, tileHeight * 4);
+          
+          // Add frame to GIF
+          gif.addFrame(combinedCtx, {copy: true, delay: 200});
         }
       }
 
       gif.on('finished', (blob) => {
         const url = URL.createObjectURL(blob);
         combinedContainer.innerHTML = ''; // Clear previous GIF and spritesheet
-
-        // Add original spritesheet
-        const originalImageElement = document.createElement('img');
-        originalImageElement.src = image.src;
-        originalImageElement.alt = 'Original Spritesheet';
-        combinedContainer.appendChild(originalImageElement);
 
         // Add generated GIF
         const gifElement = document.createElement('img');
