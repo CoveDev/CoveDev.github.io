@@ -124,10 +124,14 @@
           ctx.fillRect(0, 0, canvas.width, canvas.height); // Set background to white
           ctx.drawImage(image, x, y, tileWidth, tileHeight, 0, 0, tileWidth * 4, tileHeight * 4);
           
-          // Add frame to GIF with ImageData
-          ctx.imageSmoothingEnabled = false;
-          const frame = ctx.getImageData(0, 0, tileWidth * 4, tileHeight * 4);
-          gif.addFrame(frame, {copy: true, delay: 200});
+          // Check if the current frame has any content
+          const frameData = ctx.getImageData(0, 0, tileWidth * 4, tileHeight * 4);
+          const hasContent = frameData.data.some((value) => value !== 255); // Check if there's any non-white pixel
+          
+          // Add frame to GIF only if it has content
+          if (hasContent) {
+            gif.addFrame(frameData, {copy: true, delay: 200});
+          }
         }
       }
 
