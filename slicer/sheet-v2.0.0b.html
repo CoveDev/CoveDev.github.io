@@ -11,6 +11,7 @@
     }
     canvas {
       border: 1px solid #000;
+      image-rendering: pixelated; /* Disable smoothing for pixel art */
     }
     #gif-container {
       margin-top: 20px;
@@ -41,6 +42,9 @@
     const canvas = document.getElementById('tilesetCanvas');
     const ctx = canvas.getContext('2d');
     const gifContainer = document.getElementById('gif-container');
+
+    // Disable smoothing for pixel art
+    ctx.imageSmoothingEnabled = false;
 
     let image = new Image();
 
@@ -112,10 +116,10 @@
         for (let x = 0; x < image.width; x += tileWidth) {
           // Draw each tile on the canvas
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(image, x, y, tileWidth, tileHeight, 0, 0, tileWidth, tileHeight);
+          ctx.drawImage(image, x, y, tileWidth, tileHeight, 0, 0, tileWidth * 4, tileHeight * 4);
           
           // Add frame to GIF with ImageData
-          const frame = ctx.getImageData(0, 0, tileWidth, tileHeight);
+          const frame = ctx.getImageData(0, 0, tileWidth * 4, tileHeight * 4);
           gif.addFrame(frame, {copy: true, delay: 200});
         }
       }
