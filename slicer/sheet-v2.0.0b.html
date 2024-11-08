@@ -12,6 +12,7 @@
     canvas {
       border: 1px solid #000;
       image-rendering: pixelated; /* Disable smoothing for pixel art */
+      background-color: white; /* Set background color to white */
     }
     #gif-container {
       margin-top: 20px;
@@ -78,6 +79,8 @@
 
       // Draw the image on the canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height); // Set background to white
       ctx.drawImage(image, 0, 0);
 
       // Draw the grid over the image
@@ -117,6 +120,8 @@
         for (let x = 0; x < image.width; x += tileWidth) {
           // Draw each tile on the canvas
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = 'white';
+          ctx.fillRect(0, 0, canvas.width, canvas.height); // Set background to white
           ctx.drawImage(image, x, y, tileWidth, tileHeight, 0, 0, tileWidth * 4, tileHeight * 4);
           
           // Add frame to GIF with ImageData
