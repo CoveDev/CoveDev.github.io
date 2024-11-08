@@ -268,17 +268,17 @@
       const sortedRows = Array.from(toggledRows).sort((a, b) => a - b);
       // draw something on the right side of the main animation, stationary, basically every frame selected
       hiddenCtx.fillStyle = "white";
-      hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
       let tileamount = Math.floor(rightCanvas.width / 44);
-      hiddenCanvas.width = 44*tileamount+mainSize;
-      hiddenCanvas.style.width = 44*tileamount+mainSize;
+      hiddenCanvas.width = 44*tileamount/8+mainSize;
+      hiddenCanvas.style.width = 44*tileamount/8+mainSize;
+      hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
       while (tileX < rightCanvas.width) {
         sortedRows.forEach((rowY) => {
           hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, mainSize+targetX, targetY, 44, 44);
         });
         tileX += 44;
         targetX += 44;
-        if (targetX >= 44*tileamount) {
+        if (targetX >= 44*tileamount/8) {
           targetX = 0;
           targetY += 44;
         }
