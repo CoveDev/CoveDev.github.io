@@ -100,7 +100,7 @@
         ctx.stroke();
       }
     }
-
+    
     generateGifButton.addEventListener('click', () => {
       if (!image.src) return;
       const tileWidth = parseInt(tileWidthInput.value);
@@ -108,10 +108,11 @@
 
       const gif = new GIF({
         workers: 2,
-        quality: 10,
+        quality: 3,
         workerScript: 'gif.worker.js'
       });
 
+      ctx.imageSmoothingEnabled = false;
       for (let y = 0; y < image.height; y += tileHeight) {
         for (let x = 0; x < image.width; x += tileWidth) {
           // Draw each tile on the canvas
@@ -119,6 +120,7 @@
           ctx.drawImage(image, x, y, tileWidth, tileHeight, 0, 0, tileWidth * 4, tileHeight * 4);
           
           // Add frame to GIF with ImageData
+          ctx.imageSmoothingEnabled = false;
           const frame = ctx.getImageData(0, 0, tileWidth * 4, tileHeight * 4);
           gif.addFrame(frame, {copy: true, delay: 200});
         }
