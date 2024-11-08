@@ -255,8 +255,6 @@
         workerScript: 'gif.worker.js'
       });
 
-      const hiddenCtx = hiddenCanvas.getContext('2d');
-      hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
 
       let mainSize = 176
       
@@ -264,11 +262,14 @@
       let targetX = 0;
       let targetY = 0;
       const sortedRows = Array.from(toggledRows).sort((a, b) => a - b);
-      // draw something on the right side of the main animation, stationary, basically every frame selected
-      hiddenCtx.fillStyle = "white";
       let tileamount = Math.floor(rightCanvas.width / 44);
       hiddenCanvas.style.width = 44*tileamount/8+mainSize + "px";
       hiddenCanvas.width = 44*tileamount/8+mainSize;
+      
+      const hiddenCtx = hiddenCanvas.getContext('2d');
+      hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+      // draw something on the right side of the main animation, stationary, basically every frame selected
+      hiddenCtx.fillStyle = "white";
       hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
       hiddenCtx.imageSmoothingEnabled = false;  // Ensure smoothing is disabled for each draw operation
       while (tileX < rightCanvas.width) {
