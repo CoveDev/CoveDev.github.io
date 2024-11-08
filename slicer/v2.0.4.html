@@ -256,9 +256,7 @@
       });
 
       const hiddenCtx = hiddenCanvas.getContext('2d');
-      hiddenCtx.imageSmoothingEnabled = false;  // Disable smoothing for crisp pixel art rendering
       hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-      hiddenCtx.imageSmoothingEnabled = false;  // Ensure smoothing is disabled for each draw operation
 
       let mainSize = 176
       
@@ -269,9 +267,10 @@
       // draw something on the right side of the main animation, stationary, basically every frame selected
       hiddenCtx.fillStyle = "white";
       let tileamount = Math.floor(rightCanvas.width / 44);
+      hiddenCanvas.style.width = 44*tileamount/8+mainSize + "px";
       hiddenCanvas.width = 44*tileamount/8+mainSize;
-      hiddenCanvas.style.width = 44*tileamount/8+mainSize;
       hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+      hiddenCtx.imageSmoothingEnabled = false;  // Ensure smoothing is disabled for each draw operation
       while (tileX < rightCanvas.width) {
         sortedRows.forEach((rowY) => {
           hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, mainSize+targetX, targetY, 44, 44);
