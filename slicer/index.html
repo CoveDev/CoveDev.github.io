@@ -45,6 +45,12 @@
       margin-top: 10px;
       display: block;
     }
+    #hiddenCanvas {
+      display: none;
+      width: 352px;
+      height: 352px;
+      image-rendering: pixelated; /* Ensures crisp rendering for pixel art */
+    }
 
     /* Dark mode styles */
     body.dark-mode {
@@ -64,6 +70,7 @@
       border-color: #fff;
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
 </head>
 <body>
   <h3>Left Canvas (44x44 pixels)</h3>
@@ -78,6 +85,8 @@
   <input type="file" id="fileInput" accept="image/*" hidden>
   <button id="uploadButton">Upload an Image</button>
   <button id="darkModeToggle">Toggle Dark Mode</button>
+  <button id="generateGifButton">Generate GIF</button>
+  <canvas id="hiddenCanvas" width="352" height="352"></canvas>
 
   <script>
     const rightCanvasContainer = document.getElementById('rightCanvasContainer');
@@ -88,10 +97,13 @@
     const fileInput = document.getElementById('fileInput');
     const uploadButton = document.getElementById('uploadButton');
     const darkModeToggle = document.getElementById('darkModeToggle');
+    const generateGifButton = document.getElementById('generateGifButton');
+    const hiddenCanvas = document.getElementById('hiddenCanvas');
 
     let uploadedImage = null; // Store the uploaded image
     let animationInterval = null; // Store the interval ID for animation
     let toggledRows = new Set(); // Store toggled rows
+    let frames = []; // Store frames for GIF generation
 
     // Add drag and drop functionality to the right canvas container
     rightCanvasContainer.addEventListener('dragover', (e) => {
@@ -182,6 +194,8 @@
         clearInterval(animationInterval);
       }
 
+      frames = []; // Clear frames for GIF generation
+
       // Function to draw the next frame of the selected rows
       let tileX = 0;
       function drawNextFrame() {
@@ -217,6 +231,9 @@
           rightCtx.fillRect(tileX, rowY, 44, 44);
         });
 
+        // Capture frame for GIF
+        frames.push(leftCanvas.toDataURL());
+
         // Move to the next tile to the right
         tileX += 44;
         if (tileX >= rightCanvas.width) {
@@ -226,6 +243,79 @@
 
       // Start the animation at 1/12 second intervals
       animationInterval = setInterval(drawNextFrame, 1000 / 12);
+    });
+
+    // Generate GIF functionality
+    generateGifButton.addEventListener('click', () => {
+      if (frames.length === 0) return;
+
+      const gif = new GIF({
+        workers: 2,
+        quality: 3,
+        workerScript: 'gif.worker.js'
+      });
+
+
+      let mainSize = 176
+      
+      let tileX = 0;
+      let targetX = 0;
+      let targetY = 0;
+      const sortedRows = Array.from(toggledRows).sort((a, b) => a - b);
+      let tileamount = Math.floor(rightCanvas.width / 44);
+      hiddenCanvas.style.width = 44*tileamount/8+mainSize + "px";
+      hiddenCanvas.width = 44*tileamount/8+mainSize;
+      
+      const hiddenCtx = hiddenCanvas.getContext('2d');
+      hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+      // draw something on the right side of the main animation, stationary, basically every frame selected
+      hiddenCtx.fillStyle = "white";
+      hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+      hiddenCtx.imageSmoothingEnabled = false;  // Ensure smoothing is disabled for each draw operation
+      while (tileX < rightCanvas.width) {
+        sortedRows.forEach((rowY) => {
+          hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, mainSize+targetX, targetY, 44, 44);
+        });
+        tileX += 44;
+        targetX += 44;
+        if (targetX >= 44*tileamount/8) {
+          targetX = 0;
+          targetY += 44;
+        }
+      }
+      
+      tileX = 0;
+      // main animation: emulate leftCanvas, merge every selected row and put every frame into a gif
+      while (tileX < rightCanvas.width) {
+        //hiddenCtx.clearRect(0, 88, mainSize, mainSize);
+        hiddenCtx.fillStyle = "white";
+        hiddenCtx.fillRect(0, 88, mainSize, mainSize);
+        sortedRows.forEach((rowY) => {
+          // Draw the selected row from the uploaded image to the hidden canvas
+          hiddenCtx.drawImage(uploadedImage, tileX, rowY, 44, 44, 0, 88, mainSize, mainSize);
+        });
+        gif.addFrame(hiddenCanvas, { copy: true, width: hiddenCanvas.width, height: hiddenCanvas.height, delay: 1000 / 12 });
+        tileX += 44;
+      }
+
+      gif.on('finished', (blob) => {
+        const url = URL.createObjectURL(blob);
+        const gifImage = document.createElement('img');
+        gifImage.src = url;
+        gifImage.style.width = hiddenCanvas.width+'px';
+        gifImage.style.height = '352px';
+        gifImage.style.marginLeft = '20px';
+        gifImage.style.cursor = 'pointer';
+        gifImage.addEventListener('click', () => {
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'animation.gif';
+          link.click();
+        });
+        zoomed4xCanvas.insertAdjacentElement('afterend', gifImage);
+      });
+
+      gif.render();
     });
 
     // Dark mode toggle functionality
