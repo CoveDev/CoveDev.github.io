@@ -132,7 +132,7 @@
           ctx.drawImage(image, 0, 0);
 
           // Draw each tile on top of the original spritesheet
-          ctx.drawImage(image, x, y, tileWidth, tileHeight, canvas.width, 0, tileWidth, tileHeight);
+          ctx.drawImage(image, x, y, tileWidth, tileHeight, canvas.width, 0, tileWidth * 4, tileHeight * 4);
           
           // Create a larger canvas to combine both original spritesheet and the tile
           const combinedCanvas = document.createElement('canvas');
@@ -148,7 +148,7 @@
           combinedCtx.drawImage(canvas, canvas.width, 0, tileWidth * 4, tileHeight * 4);
           
           // Add frame to GIF
-          gif.addFrame(combinedCtx, {copy: true, delay: 200});
+          gif.addFrame(combinedCanvas, {copy: true, delay: 200});
         }
       }
 
