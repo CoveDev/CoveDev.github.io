@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JSON Table Editor</title>
+    <!-- Handsontable CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@11.1.0/dist/handsontable.full.min.css">
+    <!-- Custom Styles -->
+    <style>
+        #jsonInput {
+            width: 800px;
+            height: 150px;
+        }
+        #handsontable-container {
+            width: 800px;
+            margin-top: 20px;
+        }
+        #message {
+            color: red;
+        }
+        .action-button {
+            margin: 0 2px;
+            padding: 2px 5px;
+            font-size: 12px;
+        }
+        .same-as-above {
+            color: #aaa; /* Light gray color */
+        }
+    </style>
+</head>
+<body>
+    <h1>JSON Table Editor</h1>
+    <textarea id="jsonInput" placeholder="Paste your JSON here"></textarea><br><br>
+    <button onclick="loadTable()">Load Table</button>
+    <button onclick="exportJSON()">Export JSON</button>
+    <div id="handsontable-container"></div>
+    <pre id="message"></pre>
+
+    <!-- Handsontable JS -->
+    <script src="https://cdn.jsdelivr.net/npm/handsontable@11.1.0/dist/handsontable.full.min.js"></script>
+    <script>
+        let hot; // Handsontable instance
+        const stages = ['dev', 'stage', 'prod'];
+        const platforms = ['gcp', 'aws'];
+
+        function loadTable() {
+            const jsonText = document.getElementById('jsonInput').value;
+            let jsonData;
+            try {
+                jsonData = JSON.parse(jsonText);
+                const dataArray = jsonToArray(jsonData);
+
+                const container = document.getElementById('handsontable-container');
+
+                // Destroy existing Handsontable instance if it exists
+                if (hot) {
+                    hot.destroy();
+                }
+
+                // Initialize Handsontable
+                hot = new Handsontable(container, {
+                    data: dataArray,
+                    colHeaders: ['User', 'Stage', 'Platform', 'Values', 'Actions'],
+                    columns: [
+                        { data: 'user', type: 'text' },
+                        {
+                            data: 'stage',
+                            type: 'dropdown',
+                            source: stages,
+                        },
+                        {
+                            data: 'platform',
+                            type: 'dropdown',
+                            source: platforms,
+                        },
+                        { data: 'values', type: 'text' },
+                        {
+                            data: null,
+                            renderer: actionButtonsRenderer,
+                            readOnly: true,
+                            width: 80,
+                        },
+                    ],
+                    rowHeaders: true,
+                    filters: true,
+                    dropdownMenu: true,
+                    manualRowMove: true,
+                    manualColumnMove: true,
+                    contextMenu: true,
+                    licenseKey: 'non-commercial-and-evaluation',
+                    cells: cellProperties,
+                });
+
+                document.getElementById('message').textContent = 'Data loaded into table successfully.';
+            } catch (e) {
+                document.getElementById('message').textContent = 'Error parsing JSON: ' + e.message;
+            }
+        }
+
+        // Remove the "Clone" button and keep only "Add Row"
+        function actionButtonsRenderer(instance, td, row, col, prop, value, cellProperties) {
+            Handsontable.dom.empty(td);
+
+            // Create "Add Row" button
+            const addButton = document.createElement('button');
+            addButton.innerText = 'Add Row';
+            addButton.className = 'action-button';
+            addButton.onclick = function() {
+                addEmptyRow(row);
+            };
+
+            // Append button to cell
+            td.appendChild(addButton);
+
+            return td;
+        }
+
+        function jsonToArray(json) {
+            const result = [];
+            for (const user in json) {
+                const envs = json[user];
+                for (const env in envs) {
+                    if (typeof envs[env] !== 'object') {
+                        continue; // Skip if the env doesn't have an expected object structure
+                    }
+                    const platforms = envs[env];
+                    for (const platform in platforms) {
+                        const values = platforms[platform];
+                        if (Array.isArray(values)) {
+                            result.push({
+                                user: user,
+                                stage: env,
+                                platform: platform,
+                                values: values.join(', '),
+                            });
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
+        function arrayToJson(array) {
+            const json = {};
+            array.forEach((row) => {
+                const user = row.user;
+                const stage = row.stage;
+                const platform = row.platform;
+                const values = row.values ? row.values.split(',').map((s) => s.trim()) : [];
+
+                if (!user || !stage || !platform) {
+                    return; // Skip invalid rows
+                }
+
+                if (!json[user]) {
+                    json[user] = {};
+                }
+                if (!json[user][stage]) {
+                    json[user][stage] = {};
+                }
+                json[user][stage][platform] = values;
+            });
+            return json;
+        }
+
+        function exportJSON() {
+            if (!hot) {
+                document.getElementById('message').textContent = 'No data to export.';
+                return;
+            }
+
+            const tableData = hot.getData();
+            const headers = hot.getColHeader();
+            const dataObjects = tableData.map((row) => {
+                const obj = {};
+                headers.forEach((header, index) => {
+                    if (header !== 'Actions') { // Skip the Actions column
+                        obj[header.toLowerCase()] = row[index];
+                    }
+                });
+                return obj;
+            });
+
+            const jsonOutput = arrayToJson(dataObjects);
+            const dataStr = JSON.stringify(jsonOutput, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+
+            const exportFileDefaultName = 'data.json';
+
+            let linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+
+            document.getElementById('message').textContent = 'JSON data exported successfully.';
+        }
+
+        function addEmptyRow(rowIndex) {
+            if (!hot) {
+                document.getElementById('message').textContent = 'Load data into the table first.';
+                return;
+            }
+
+            // Insert an empty row below the specified row
+            hot.alter('insert_row', rowIndex + 1);
+
+            // Set default values for the new row
+            hot.setDataAtRowProp(rowIndex + 1, 'user', '');
+            hot.setDataAtRowProp(rowIndex + 1, 'stage', stages[0]);
+            hot.setDataAtRowProp(rowIndex + 1, 'platform', platforms[0]);
+            hot.setDataAtRowProp(rowIndex + 1, 'values', '');
+
+            document.getElementById('message').textContent = 'Empty row added successfully.';
+        }
+
+        // Function to determine cell properties
+        function cellProperties(row, col) {
+            if (!hot) {
+                return {}; // If hot is not defined, return default empty cell properties
+            }
+
+            const cellProps = {};
+
+            // Skip header row and "Actions" column
+            if (row === 0 || row === undefined || col === 4) {
+                return cellProps;
+            }
+
+            const data = hot.getData();
+
+            const currentValue = data[row][col];
+            const aboveValue = data[row - 1][col];
+
+            if (currentValue === aboveValue) {
+                cellProps.renderer = sameAsAboveRenderer;
+            } else {
+                cellProps.renderer = Handsontable.renderers.TextRenderer; // Reset to default renderer if not the same as above
+            }
+
+            return cellProps;
+        }
+
+        // Custom renderer to style cells with the same value as above
+        function sameAsAboveRenderer(instance, td, row, col, prop, value, cellProperties) {
+            Handsontable.renderers.TextRenderer.apply(this, arguments);
+            td.style.color = '#aaa'; // Set text color to light gray
+        }
+    </script>
+</body>
+</html>
