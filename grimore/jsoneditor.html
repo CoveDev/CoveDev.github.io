@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>JSON Converter</title>
+    <title>JSON Converter with Lowercase Users</title>
 </head>
 <body>
     <h1>JSON Converter</h1>
@@ -17,6 +17,7 @@
         function userToGroup(inputData) {
             let outputData = {};
             for (let user in inputData) {
+                let lowerUser = user.toLowerCase();
                 let envs = inputData[user];
                 for (let env in envs) {
                     let platforms = envs[env];
@@ -30,8 +31,8 @@
                             if (!outputData[env][platformGroup]) {
                                 outputData[env][platformGroup] = [];
                             }
-                            if (!outputData[env][platformGroup].includes(user)) {
-                                outputData[env][platformGroup].push(user);
+                            if (!outputData[env][platformGroup].includes(lowerUser)) {
+                                outputData[env][platformGroup].push(lowerUser);
                             }
                         }
                     }
@@ -48,17 +49,18 @@
                     let [platform, group] = platformGroup.split('/');
                     let users = platformGroups[platformGroup];
                     for (let user of users) {
-                        if (!outputData[user]) {
-                            outputData[user] = {};
+                        let lowerUser = user.toLowerCase();
+                        if (!outputData[lowerUser]) {
+                            outputData[lowerUser] = {};
                         }
-                        if (!outputData[user][env]) {
-                            outputData[user][env] = {};
+                        if (!outputData[lowerUser][env]) {
+                            outputData[lowerUser][env] = {};
                         }
-                        if (!outputData[user][env][platform]) {
-                            outputData[user][env][platform] = [];
+                        if (!outputData[lowerUser][env][platform]) {
+                            outputData[lowerUser][env][platform] = [];
                         }
-                        if (!outputData[user][env][platform].includes(group)) {
-                            outputData[user][env][platform].push(group);
+                        if (!outputData[lowerUser][env][platform].includes(group)) {
+                            outputData[lowerUser][env][platform].push(group);
                         }
                     }
                 }
