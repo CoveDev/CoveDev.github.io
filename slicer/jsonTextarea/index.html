@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Canvas Image Upload, Download & Scaled Pixel Animation</title>
+  <style>
+    /* Sorgen wir fürs Canvas allgemein für "schöne" Pixel-Darstellung */
+    canvas {
+      image-rendering: pixelated;    /* Chrome 80+, Safari 15+ */
+      image-rendering: crisp-edges;  /* Chrome (älter), Opera, Safari (älter) */
+      image-rendering: -moz-crisp-edges; /* Firefox */
+      image-rendering: -webkit-optimize-contrast; /* Safari (Alternativ) */
+    }
+  </style>
+</head>
+<body>
+  <input type="file" id="upload" accept="image/*">
+  <br>
+  <textarea id="prefixes" style="width: 945px; height: 152px;">
+[
+  {"prefix": "prefix1", "startX": 0, "startY": 0, "stepX": 16, "stepY": 16, "stepsX": 2, "stepsY": 2, "size": 16},
+  {"prefix": "prefix2", "startX": 32, "startY": 32, "size": 32},
+  {"prefix": "prefix3", "startX": 64, "startY": 64, "stepX": 64, "stepY": 64, "stepsX": 2, "stepsY": 2, "sizeX": 32, "sizeY": 32},
+  {"prefix": "amogus_axt", "startX": 0, "startY": 0, "stepX": 64, "stepY": 64, "stepsX": 4, "stepsY": 8, "size": 64}
+]
+  </textarea>
+  <br>
+  <button id="downloadBtn">Download Sections</button>
+  <button id="animateBtn">Animation Starten</button>
+  <br>
+
+  <!-- Canvas 1: Vorschau -->
+  <canvas id="previewCanvas" style="border:1px solid #000000;"></canvas>
+  <!-- Canvas 2: Animation (skaliert) -->
+  <canvas id="animationCanvas" style="border:1px solid #000000;"></canvas>
+
+  <script>
+    class Sprite {
+      /**
+       * @param {HTMLImageElement} image - das geladene Bild (Sprite-Sheet)
+       * @param {Object} config         - Ausschnitte und Schritte aus der JSON-Konfiguration
+       * @param {number} scaleFactor    - Skalierungsfaktor für die Darstellung
+       */
+      constructor(image, config, scaleFactor = 4) { // Standard hier auf 4 gesetzt
+        const {
+          startX = 0,
+          startY = 0,
+          stepX,
+          stepY,
+          stepsX = 1,
+          stepsY = 1,
+          size,
+          sizeX,
+          sizeY
+        } = config;
+
+        this.image = image;
+        this.scaleFactor = scaleFactor;
+
+        // Falls sizeX oder sizeY nicht explizit gesetzt sind, übernehmen wir 'size'
+        this.frameWidth  = sizeX || size || 16;
+        this.frameHeight = sizeY || size || 16;
+
+        // Schrittweiten (defaulten auf frameWidth bzw. frameHeight)
+        this.stepX = stepX || this.frameWidth;
+        this.stepY = stepY || this.frameHeight;
+
+        // Alle Frames in ein Array laden
+        this.frames = [];
+        for (let y = 0; y < stepsY; y++) {
+          for (let x = 0; x < stepsX; x++) {
+            this.frames.push({
+              sx: startX + x * this.stepX,
+              sy: startY + y * this.stepY
+            });
+          }
+        }
+
+        // Animations-Daten
+        this.frameIndex = 0;
+        this.tickCount = 0;
+        this.ticksPerFrame = 10; // Wie viele "Ticks" ein Frame stehen bleibt
+
+        // Position, an der das Sprite gezeichnet wird (kannst du anpassen)
+        this.x = 0;
+        this.y = 0;
+      }
+
+      update() {
+        this.tickCount++;
+        if (this.tickCount > this.ticksPerFrame) {
+          this.tickCount = 0;
+          this.frameIndex = (this.frameIndex + 1) % this.frames.length;
+        }
+      }
+
+      draw(ctx) {
+        const frame = this.frames[this.frameIndex];
+
+        // Position und Größe
+        const intX = Math.floor(this.x);
+        const intY = Math.floor(this.y);
+        const w = Math.floor(this.frameWidth) ;
+        const h = Math.floor(this.frameHeight) ;
+
+        ctx.drawImage(
+          this.image,
+          frame.sx, frame.sy,
+          this.frameWidth, this.frameHeight,
+          intX, intY,
+          w, h
+        );
+      }
+    }
+
+    class ImageHandler {
+      constructor(previewCanvasId, animationCanvasId, fileInputId, prefixesInputId, downloadBtnId, animateBtnId) {
+        // Canvas 1 für Vorschau
+        this.previewCanvas = document.getElementById(previewCanvasId);
+        this.previewCtx = this.previewCanvas.getContext('2d');
+
+        // Canvas 2 für Animation
+        this.animCanvas = document.getElementById(animationCanvasId);
+        this.animCtx = this.animCanvas.getContext('2d');
+
+        this.fileInput = document.getElementById(fileInputId);
+        this.prefixesInput = document.getElementById(prefixesInputId);
+        this.downloadBtn = document.getElementById(downloadBtnId);
+        this.animateBtn = document.getElementById(animateBtnId);
+
+        this.image = new Image();
+
+        // Hier sammeln wir die Sprites für die Animation
+        this.sprites = [];
+        this.isAnimating = false;
+
+        // --- Ganz wichtig, um Pixelart nicht zu verwischen ---
+        this.animCtx.imageSmoothingEnabled = false;
+        this.animCtx.webkitImageSmoothingEnabled = false;
+        this.animCtx.mozImageSmoothingEnabled = false;
+        this.animCtx.msImageSmoothingEnabled = false;
+
+        // Smoothing für Vorschau deaktivieren
+        this.previewCtx.imageSmoothingEnabled = false;
+
+        this.addEventListeners();
+      }
+
+      addEventListeners() {
+        this.fileInput.addEventListener('change', (e) => this.loadImage(e));
+        this.downloadBtn.addEventListener('click', () => this.handleDownload());
+        this.animateBtn.addEventListener('click', () => this.startAnimation());
+      }
+
+      loadImage(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          this.image.onload = () => {
+            this.drawPreview();
+          };
+          this.image.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      drawPreview() {
+        // Canvas 1: Vorschau
+        this.previewCanvas.width = this.image.width;
+        this.previewCanvas.height = this.image.height;
+        this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
+        this.previewCtx.drawImage(this.image, 0, 0, this.image.width, this.image.height);
+
+        // Canvas 2: Testweise feste Größe einstellen
+		var animscreensize = 128
+		var animscreenscale = 4
+        this.animCanvas.width = animscreensize; // Feste Breite
+        this.animCanvas.height = animscreensize; // Feste Höhe
+        this.animCanvas.style.width = animscreensize*animscreenscale+"px"; // Feste Breite
+        this.animCanvas.style.height = animscreensize*animscreenscale+"px"; // Feste Höhe
+        this.animCtx.clearRect(0, 0, this.animCanvas.width, this.animCanvas.height);
+      }
+
+      handleDownload() {
+        const input = this.prefixesInput.value;
+        let configurations;
+
+        try {
+          configurations = JSON.parse(input);
+        } catch (e) {
+          alert('Invalid JSON format');
+          return;
+        }
+
+        configurations.forEach(config => {
+          const {
+            prefix,
+            startX = 0,
+            startY = 0,
+            stepX,
+            stepY,
+            stepsX = 1,
+            stepsY = 1,
+            size,
+            sizeX,
+            sizeY
+          } = config;
+
+          // Dieser Aufruf erzeugt die einzelnen Dateien
+          this.downloadSections(
+            prefix,
+            startX,
+            startY,
+            stepX || sizeX || size,
+            stepY || sizeY || size,
+            stepsX,
+            stepsY,
+            sizeX || size || 16,
+            sizeY || size || 16
+          );
+        });
+      }
+
+      downloadSections(prefix, startX, startY, stepX, stepY, stepsX, stepsY, sizeX, sizeY) {
+        for (let i = 0; i < stepsX; i++) {
+          for (let j = 0; j < stepsY; j++) {
+            const x = startX + i * stepX;
+            const y = startY + j * stepY;
+            const filename = `${prefix}_${i}_${j}.png`;
+            this.downloadSection(x, y, sizeX, sizeY, filename);
+          }
+        }
+      }
+
+      downloadSection(x, y, sizeX, sizeY, filename) {
+        const sectionCanvas = document.createElement('canvas');
+        sectionCanvas.width = sizeX;
+        sectionCanvas.height = sizeY;
+        const sectionCtx = sectionCanvas.getContext('2d');
+
+        // Ausschnitt vom Preview-Canvas übernehmen
+        sectionCtx.drawImage(this.previewCanvas, x, y, sizeX, sizeY, 0, 0, sizeX, sizeY);
+
+        const dataURL = sectionCanvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      // Animation starten (erst wird die config ausgelesen und Sprites erzeugt)
+      startAnimation() {
+        if (!this.image.src) {
+          alert('Bitte zuerst ein Bild hochladen!');
+          return;
+        }
+
+        // Einlesen der JSON-Konfiguration
+        let configs;
+        try {
+          configs = JSON.parse(this.prefixesInput.value);
+        } catch (err) {
+          alert('Fehler beim Lesen des JSON.');
+          return;
+        }
+
+        // Sprites neu anlegen
+        this.sprites = [];
+
+        // Wir haben den scaleFactor schon im Sprite-Konstruktor auf 4 gesetzt
+        configs.forEach(config => {
+          const sprite = new Sprite(this.image, config, 4);
+
+          // Zufällige Position, abgestimmt auf die Canvas-Größe
+          const maxX = this.animCanvas.width  - sprite.frameWidth;
+          const maxY = this.animCanvas.height - sprite.frameHeight;
+		  console.log(this.animCanvas.height)
+          sprite.x = Math.random() * Math.max(0, maxX);
+          sprite.y = Math.random() * Math.max(0, maxY);
+		
+			console.log(sprite.frameHeight)
+          this.sprites.push(sprite);
+        });
+
+        // Falls noch nicht animiert wird, Animation aktivieren
+        if (!this.isAnimating) {
+          this.isAnimating = true;
+          this.animate();
+        }
+      }
+
+      // Der eigentliche Animations-Loop (auf das Animations-Canvas)
+      animate() {
+        if (!this.isAnimating) return;
+
+        requestAnimationFrame(() => this.animate());
+
+        // Canvas 2 löschen
+        this.animCtx.clearRect(0, 0, this.animCanvas.width, this.animCanvas.height);
+
+        // Jeden Sprite updaten und neu zeichnen
+        this.sprites.forEach(sprite => {
+          sprite.update();
+		  console.log(sprite.x)
+          sprite.draw(this.animCtx);
+        });
+      }
+    }
+
+    // Instanz der ImageHandler-Klasse erzeugen (Vorschau-Canvas, Animations-Canvas, Input-Elemente ...)
+    new ImageHandler(
+      'previewCanvas',
+      'animationCanvas',
+      'upload',
+      'prefixes',
+      'downloadBtn',
+      'animateBtn'
+    );
+  </script>
+</body>
+</html>
