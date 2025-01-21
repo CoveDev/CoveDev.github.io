@@ -224,8 +224,8 @@
       }
 
       downloadSections(prefix, startX, startY, stepX, stepY, stepsX, stepsY, sizeX, sizeY) {
-        for (let i = 0; i < stepsX; i++) {
-          for (let j = 0; j < stepsY; j++) {
+        for (let j = 0; j < stepsY; j++) {
+          for (let i = 0; i < stepsX; i++) {
             const x = startX + i * stepX;
             const y = startY + j * stepY;
             const filename = `${prefix}_${i}_${j}.png`;
