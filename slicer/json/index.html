@@ -20,20 +20,23 @@
 [
   {
     "prefix": "prefix1",
-    "tileStartX": 2,
-    "tileStartY": 1,
-    "stepsX": 3,
-    "stepsY": 2,
-    "size": 32
+    "startX": 0,
+    "startY": 0,
+    "shiftX": 0,
+    "shiftY": 0,
+    "stepsX": 4,
+    "stepsY": 8,
+    "size": 44
   },
   {
     "prefix": "prefix2",
-    "startX": 50,
-    "startY": 100,
-    "stepsX": 2,
-    "stepsY": 2,
-    "sizeX": 48,
-    "sizeY": 48
+    "startX": 0,
+    "startY": 0,
+    "shiftX": 2,
+    "shiftY": 1,
+    "stepsX": 4,
+    "stepsY": 8,
+    "size": 44
   }
 ]
   </textarea>
@@ -54,15 +57,13 @@
        * @param {Object} config         - Ausschnitte und Schritte aus der JSON-Konfiguration
        * @param {number} scaleFactor    - Skalierungsfaktor für die Darstellung
        */
-      constructor(image, config, scaleFactor = 4) { // Standard hier auf 4 gesetzt
-        let {
-          // The new optional parameters:
-          tileStartX,
-          tileStartY,
-
-          // The original ones:
-          startX,
-          startY,
+      constructor(image, config, scaleFactor = 4) {
+        // ADDED SHIFTX, SHIFTY HERE:
+        const {
+          startX = 0,
+          startY = 0,
+          shiftX = 0,
+          shiftY = 0,   // <- new parameters
           stepX,
           stepY,
           stepsX = 1,
@@ -79,25 +80,23 @@
         this.frameWidth  = sizeX || size || 16;
         this.frameHeight = sizeY || size || 16;
 
-        // Wenn startX bzw. startY *nicht* definiert, dann auf tileStartX*frameWidth fallbacken
-        if (typeof startX === 'undefined') {
-          startX = (tileStartX || 0) * this.frameWidth;
-        }
-        if (typeof startY === 'undefined') {
-          startY = (tileStartY || 0) * this.frameHeight;
-        }
-
-        // Schrittweiten (default auf frameWidth bzw. frameHeight)
+        // Schrittweiten (defaulten auf frameWidth bzw. frameHeight)
         this.stepX = stepX || this.frameWidth;
         this.stepY = stepY || this.frameHeight;
+
+        // --------------------------------------------
+        // Apply shift AFTER we know frameWidth/Height:
+        // --------------------------------------------
+        const actualStartX = startX + shiftX * this.frameWidth; 
+        const actualStartY = startY + shiftY * this.frameHeight;
 
         // Alle Frames in ein Array laden
         this.frames = [];
         for (let y = 0; y < stepsY; y++) {
           for (let x = 0; x < stepsX; x++) {
             this.frames.push({
-              sx: startX + x * this.stepX,
-              sy: startY + y * this.stepY
+              sx: actualStartX + x * this.stepX,
+              sy: actualStartY + y * this.stepY
             });
           }
         }
@@ -199,13 +198,13 @@
         this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
         this.previewCtx.drawImage(this.image, 0, 0, this.image.width, this.image.height);
 
-        // Canvas 2: Feste Größe
+        // Canvas 2: Testweise feste Größe einstellen
         const animscreensize = 128;
         const animscreenscale = 4;
         this.animCanvas.width = animscreensize; 
         this.animCanvas.height = animscreensize; 
-        this.animCanvas.style.width = animscreensize * animscreenscale + "px"; 
-        this.animCanvas.style.height = animscreensize * animscreenscale + "px"; 
+        this.animCanvas.style.width = animscreensize * animscreenscale + "px";
+        this.animCanvas.style.height = animscreensize * animscreenscale + "px";
         this.animCtx.clearRect(0, 0, this.animCanvas.width, this.animCanvas.height);
       }
 
@@ -223,14 +222,10 @@
         configurations.forEach(config => {
           const {
             prefix,
-            
-            // The newly supported parameters for tile-based start:
-            tileStartX,
-            tileStartY,
-
-            // Existing / old parameters
-            startX,
-            startY,
+            startX = 0,
+            startY = 0,
+            shiftX = 0,  // ADDED SHIFTX, SHIFTY HERE:
+            shiftY = 0,
             stepX,
             stepY,
             stepsX = 1,
@@ -240,33 +235,27 @@
             sizeY
           } = config;
 
-          // Compute the actual frame width & height
-          const frameWidth = sizeX || size || 16;
-          const frameHeight = sizeY || size || 16;
+          // Für die Download-Sections brauchen wir again die konkrete Größe
+          const finalSizeX = sizeX || size || 16;
+          const finalSizeY = sizeY || size || 16;
+          // Wenn stepX/stepY nicht gesetzt, nehmen wir finalSizeX/Y
+          const finalStepX = stepX || finalSizeX;
+          const finalStepY = stepY || finalSizeY;
 
-          // If startX or startY are undefined, use tileStartX * frameWidth, etc.
-          const effectiveStartX = (typeof startX === 'undefined')
-            ? (tileStartX || 0) * frameWidth
-            : startX;
-          const effectiveStartY = (typeof startY === 'undefined')
-            ? (tileStartY || 0) * frameHeight
-            : startY;
+          // Hier berücksichtigen wir shiftX, shiftY
+          const shiftedStartX = startX + shiftX * finalSizeX;
+          const shiftedStartY = startY + shiftY * finalSizeY;
 
-          // Similarly for the step sizes
-          const effectiveStepX = stepX || frameWidth;
-          const effectiveStepY = stepY || frameHeight;
-
-          // Dieser Aufruf erzeugt die einzelnen Dateien
           this.downloadSections(
             prefix,
-            effectiveStartX,
-            effectiveStartY,
-            effectiveStepX,
-            effectiveStepY,
+            shiftedStartX,
+            shiftedStartY,
+            finalStepX,
+            finalStepY,
             stepsX,
             stepsY,
-            frameWidth,
-            frameHeight
+            finalSizeX,
+            finalSizeY
           );
         });
       }
@@ -320,7 +309,7 @@
         this.sprites = [];
 
         configs.forEach(config => {
-          // Der Konstruktor von Sprite berücksichtigt nun tileStartX/tileStartY
+          // Alle Sprite-Objekte erstellen
           const sprite = new Sprite(this.image, config, 4);
 
           // Zufällige Position, abgestimmt auf die Canvas-Größe
@@ -332,7 +321,7 @@
           this.sprites.push(sprite);
         });
 
-        // Falls noch nicht animiert wird, Animation aktivieren
+        // Falls noch nicht animiert wird, Animation starten
         if (!this.isAnimating) {
           this.isAnimating = true;
           this.animate();
@@ -356,7 +345,7 @@
       }
     }
 
-    // Instanz der ImageHandler-Klasse erzeugen (Vorschau-Canvas, Animations-Canvas, Input-Elemente ...)
+    // Instanz der ImageHandler-Klasse erzeugen
     new ImageHandler(
       'previewCanvas',
       'animationCanvas',
