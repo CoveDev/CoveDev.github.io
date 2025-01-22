@@ -18,10 +18,23 @@
   <br>
   <textarea id="prefixes" style="width: 945px; height: 152px;">
 [
-  {"prefix": "prefix1", "startX": 0, "startY": 0, "stepsX":4, "stepsY":8, "size": 44},
-  {"prefix": "prefix1", "startX": 440, "startY": 0, "stepsX":4, "stepsY":8, "size": 44},
-  {"prefix": "prefix1", "startX": 220, "startY": 0, "stepsX":4, "stepsY":8, "size": 44},
-  {"prefix": "prefix1", "startX": 0, "startY": 132, "stepsX":4, "size": 44}
+  {
+    "prefix": "prefix1",
+    "tileStartX": 2,
+    "tileStartY": 1,
+    "stepsX": 3,
+    "stepsY": 2,
+    "size": 32
+  },
+  {
+    "prefix": "prefix2",
+    "startX": 50,
+    "startY": 100,
+    "stepsX": 2,
+    "stepsY": 2,
+    "sizeX": 48,
+    "sizeY": 48
+  }
 ]
   </textarea>
   <br>
@@ -42,9 +55,14 @@
        * @param {number} scaleFactor    - Skalierungsfaktor für die Darstellung
        */
       constructor(image, config, scaleFactor = 4) { // Standard hier auf 4 gesetzt
-        const {
-          startX = 0,
-          startY = 0,
+        let {
+          // The new optional parameters:
+          tileStartX,
+          tileStartY,
+
+          // The original ones:
+          startX,
+          startY,
           stepX,
           stepY,
           stepsX = 1,
@@ -61,7 +79,15 @@
         this.frameWidth  = sizeX || size || 16;
         this.frameHeight = sizeY || size || 16;
 
-        // Schrittweiten (defaulten auf frameWidth bzw. frameHeight)
+        // Wenn startX bzw. startY *nicht* definiert, dann auf tileStartX*frameWidth fallbacken
+        if (typeof startX === 'undefined') {
+          startX = (tileStartX || 0) * this.frameWidth;
+        }
+        if (typeof startY === 'undefined') {
+          startY = (tileStartY || 0) * this.frameHeight;
+        }
+
+        // Schrittweiten (default auf frameWidth bzw. frameHeight)
         this.stepX = stepX || this.frameWidth;
         this.stepY = stepY || this.frameHeight;
 
@@ -100,8 +126,8 @@
         // Position und Größe
         const intX = Math.floor(this.x);
         const intY = Math.floor(this.y);
-        const w = Math.floor(this.frameWidth) ;
-        const h = Math.floor(this.frameHeight) ;
+        const w = Math.floor(this.frameWidth);
+        const h = Math.floor(this.frameHeight);
 
         ctx.drawImage(
           this.image,
@@ -173,13 +199,13 @@
         this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
         this.previewCtx.drawImage(this.image, 0, 0, this.image.width, this.image.height);
 
-        // Canvas 2: Testweise feste Größe einstellen
-		var animscreensize = 128
-		var animscreenscale = 4
-        this.animCanvas.width = animscreensize; // Feste Breite
-        this.animCanvas.height = animscreensize; // Feste Höhe
-        this.animCanvas.style.width = animscreensize*animscreenscale+"px"; // Feste Breite
-        this.animCanvas.style.height = animscreensize*animscreenscale+"px"; // Feste Höhe
+        // Canvas 2: Feste Größe
+        const animscreensize = 128;
+        const animscreenscale = 4;
+        this.animCanvas.width = animscreensize; 
+        this.animCanvas.height = animscreensize; 
+        this.animCanvas.style.width = animscreensize * animscreenscale + "px"; 
+        this.animCanvas.style.height = animscreensize * animscreenscale + "px"; 
         this.animCtx.clearRect(0, 0, this.animCanvas.width, this.animCanvas.height);
       }
 
@@ -197,8 +223,14 @@
         configurations.forEach(config => {
           const {
             prefix,
-            startX = 0,
-            startY = 0,
+            
+            // The newly supported parameters for tile-based start:
+            tileStartX,
+            tileStartY,
+
+            // Existing / old parameters
+            startX,
+            startY,
             stepX,
             stepY,
             stepsX = 1,
@@ -208,17 +240,33 @@
             sizeY
           } = config;
 
+          // Compute the actual frame width & height
+          const frameWidth = sizeX || size || 16;
+          const frameHeight = sizeY || size || 16;
+
+          // If startX or startY are undefined, use tileStartX * frameWidth, etc.
+          const effectiveStartX = (typeof startX === 'undefined')
+            ? (tileStartX || 0) * frameWidth
+            : startX;
+          const effectiveStartY = (typeof startY === 'undefined')
+            ? (tileStartY || 0) * frameHeight
+            : startY;
+
+          // Similarly for the step sizes
+          const effectiveStepX = stepX || frameWidth;
+          const effectiveStepY = stepY || frameHeight;
+
           // Dieser Aufruf erzeugt die einzelnen Dateien
           this.downloadSections(
             prefix,
-            startX,
-            startY,
-            stepX || sizeX || size,
-            stepY || sizeY || size,
+            effectiveStartX,
+            effectiveStartY,
+            effectiveStepX,
+            effectiveStepY,
             stepsX,
             stepsY,
-            sizeX || size || 16,
-            sizeY || size || 16
+            frameWidth,
+            frameHeight
           );
         });
       }
@@ -271,18 +319,16 @@
         // Sprites neu anlegen
         this.sprites = [];
 
-        // Wir haben den scaleFactor schon im Sprite-Konstruktor auf 4 gesetzt
         configs.forEach(config => {
+          // Der Konstruktor von Sprite berücksichtigt nun tileStartX/tileStartY
           const sprite = new Sprite(this.image, config, 4);
 
           // Zufällige Position, abgestimmt auf die Canvas-Größe
           const maxX = this.animCanvas.width  - sprite.frameWidth;
           const maxY = this.animCanvas.height - sprite.frameHeight;
-		  console.log(this.animCanvas.height)
           sprite.x = Math.random() * Math.max(0, maxX);
           sprite.y = Math.random() * Math.max(0, maxY);
-		
-			console.log(sprite.frameHeight)
+
           this.sprites.push(sprite);
         });
 
@@ -305,7 +351,6 @@
         // Jeden Sprite updaten und neu zeichnen
         this.sprites.forEach(sprite => {
           sprite.update();
-		  console.log(sprite.x)
           sprite.draw(this.animCtx);
         });
       }
