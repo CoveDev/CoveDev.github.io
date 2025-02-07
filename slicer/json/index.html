@@ -265,7 +265,7 @@
           for (let i = 0; i < stepsX; i++) {
             const x = startX + i * stepX;
             const y = startY + j * stepY;
-            const filename = `${prefix}_${i}_${j}.png`;
+            const filename = `${prefix}_${j}_${i}.png`;
             this.downloadSection(x, y, sizeX, sizeY, filename);
           }
         }
