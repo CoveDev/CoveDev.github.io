@@ -1,96 +1,174 @@
+// Get canvas and context
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// Create game objects
-const tileMap = new TileMap();
-tileMap.initializeMap();
+// Get UI elements
+const tileset1Image = document.getElementById('tileset1Image');
+const tileset2Image = document.getElementById('tileset2Image');
+const tileset1Button = document.getElementById('tileset1');
+const tileset2Button = document.getElementById('tileset2');
+const clearButton = document.getElementById('clear');
+const randomButton = document.getElementById('random');
 
-// Create player in the center of the map (which is the starting room)
-const centerX = Math.floor(tileMap.mapWidth / 2) * tileMap.tileSize;
-const centerY = Math.floor(tileMap.mapHeight / 2) * tileMap.tileSize;
-const player = new Player(centerX, centerY, tileMap);
+// Initialize game state
+let currentTileset = 1;
+let isDrawing = false;
+const tilesetManager = new TilesetManager();
 
-// Create camera centered on player
-const camera = new Camera(player);
-let mapInitialized = true;
+// Mouse state
+let lastX = -1;
+let lastY = -1;
 
-// Initialize keyboard state
-const keys = {};
+// Convert mouse coordinates to grid position
+function getGridPosition(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scale = Math.min(
+        canvas.width / tilesetManager.gridWidth,
+        canvas.height / tilesetManager.gridHeight
+    );
+    const offsetX = (canvas.width - tilesetManager.gridWidth * scale) / 2;
+    const offsetY = (canvas.height - tilesetManager.gridHeight * scale) / 2;
+    
+    return [
+        Math.floor((e.clientX - rect.left - offsetX) / scale),
+        Math.floor((e.clientY - rect.top - offsetY) / scale)
+    ];
+}
 
+// Mouse event handlers
+function handleMouseDown(e) {
+    isDrawing = true;
+    const [x, y] = getGridPosition(e);
+    placeTile(x, y, e.button === 2 ? 0 : currentTileset);
+}
+
+function handleMouseMove(e) {
+    if (!isDrawing) return;
+    
+    const [x, y] = getGridPosition(e);
+    if (x !== lastX || y !== lastY) {
+        placeTile(x, y, e.button === 2 ? 0 : currentTileset);
+        lastX = x;
+        lastY = y;
+    }
+}
+
+function handleMouseUp() {
+    isDrawing = false;
+    lastX = lastY = -1;
+}
+
+function placeTile(x, y, type) {
+    tilesetManager.placeTile(x, y, type);
+}
+
+// Event listeners
+canvas.addEventListener('mousedown', handleMouseDown);
+canvas.addEventListener('mousemove', handleMouseMove);
+canvas.addEventListener('mouseup', handleMouseUp);
+canvas.addEventListener('mouseleave', handleMouseUp);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// Keyboard controls
+document.addEventListener('keydown', e => {
+    if (e.altKey) {
+        currentTileset = 2;
+        tileset1Button.classList.remove('active');
+        tileset2Button.classList.add('active');
+    }
+});
+
+document.addEventListener('keyup', e => {
+    if (!e.altKey) {
+        currentTileset = 1;
+        tileset1Button.classList.add('active');
+        tileset2Button.classList.remove('active');
+    }
+});
+
+// Button controls
+tileset1Button.addEventListener('click', () => {
+    currentTileset = 1;
+    tileset1Button.classList.add('active');
+    tileset2Button.classList.remove('active');
+});
+
+tileset2Button.addEventListener('click', () => {
+    currentTileset = 2;
+    tileset1Button.classList.remove('active');
+    tileset2Button.classList.add('active');
+});
+
+clearButton.addEventListener('click', () => tilesetManager.clear());
+randomButton.addEventListener('click', () => tilesetManager.generateRandom());
+
+// Handle window resize
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 }
 
-// Handle mouse clicks
-canvas.addEventListener('click', (event) => {
-    // Get click coordinates relative to canvas and adjust for camera
-    const rect = canvas.getBoundingClientRect();
-    const transform = ctx.getTransform();
-    const clickX = (event.clientX - rect.left - transform.e) / transform.a;
-    const clickY = (event.clientY - rect.top - transform.f) / transform.d;
-    
-    // Convert to tile coordinates
-    const tileX = Math.floor(clickX / tileMap.tileSize);
-    const tileY = Math.floor(clickY / tileMap.tileSize);
-    
-    // Log tile info for debugging
-    if (tileX >= 0 && tileX < tileMap.mapWidth && tileY >= 0 && tileY < tileMap.mapHeight) {
-        console.log(`Clicked tile (${tileX}, ${tileY}): ${tileMap.tiles[tileY][tileX]}`);
-    }
-});
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
 
-// Handle keyboard input
-window.addEventListener('keydown', (event) => {
-    keys[event.key] = true;
-    if (event.key === 'h') {
-        player.toggleHitbox();
-    }
-});
-
-window.addEventListener('keyup', (event) => {
-    keys[event.key] = false;
-});
-
-// Game loop
-function gameLoop() {
+// Draw loop
+function draw() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Save context state
-    ctx.save();
+    // Draw background grid
+    const scale = Math.min(
+        canvas.width / tilesetManager.gridWidth,
+        canvas.height / tilesetManager.gridHeight
+    );
+    const offsetX = (canvas.width - tilesetManager.gridWidth * scale) / 2;
+    const offsetY = (canvas.height - tilesetManager.gridHeight * scale) / 2;
     
-    // Update camera
-    camera.update();
-    
-    // Apply camera transform with rounded positions
-    ctx.translate(
-        Math.round(-camera.x + canvas.width/2), 
-        Math.round(-camera.y + canvas.height/2)
+    // Fill background
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(
+        offsetX, offsetY,
+        tilesetManager.gridWidth * scale,
+        tilesetManager.gridHeight * scale
     );
     
-    // Draw map
-    tileMap.draw(ctx);
+    // Draw grid lines
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
     
-    // Draw player
-    player.update();
-    player.draw(ctx);
+    // Vertical lines
+    for (let x = 0; x <= tilesetManager.gridWidth; x++) {
+        ctx.beginPath();
+        ctx.moveTo(offsetX + x * scale, offsetY);
+        ctx.lineTo(offsetX + x * scale, offsetY + tilesetManager.gridHeight * scale);
+        ctx.stroke();
+    }
     
-    // Restore context state
-    ctx.restore();
+    // Horizontal lines
+    for (let y = 0; y <= tilesetManager.gridHeight; y++) {
+        ctx.beginPath();
+        ctx.moveTo(offsetX, offsetY + y * scale);
+        ctx.lineTo(offsetX + tilesetManager.gridWidth * scale, offsetY + y * scale);
+        ctx.stroke();
+    }
     
-    // Continue game loop
-    requestAnimationFrame(gameLoop);
+    // Draw tiles
+    tilesetManager.draw(ctx, tileset1Image, tileset2Image);
+    
+    // Continue animation
+    requestAnimationFrame(draw);
 }
 
-// Initial setup
-resizeCanvas();
-
-// Add event listeners
-window.addEventListener('resize', resizeCanvas);
-
-// Wait for tileset to load
-window.addEventListener('load', () => {
-    // Start the animation loop
-    gameLoop();
+// Start animation when images are loaded
+Promise.all([
+    new Promise(resolve => {
+        if (tileset1Image.complete) resolve();
+        else tileset1Image.onload = resolve;
+    }),
+    new Promise(resolve => {
+        if (tileset2Image.complete) resolve();
+        else tileset2Image.onload = resolve;
+    })
+]).then(() => {
+    requestAnimationFrame(draw);
 });

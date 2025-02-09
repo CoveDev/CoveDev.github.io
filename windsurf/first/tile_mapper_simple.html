@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Tile Mapper</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .config-viewer {
+            border: 1px solid #ccc;
+            padding: 20px;
+        }
+        .mini-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 40px);
+            gap: 2px;
+            margin-bottom: 10px;
+        }
+        .cell {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #ddd;
+            background: #8B4513;  
+        }
+        .cell.active { background: #4CAF50; }
+        .tileset-viewer {
+            border: 1px solid #ccc;
+            padding: 20px;
+        }
+        .tileset {
+            display: grid;
+            grid-template-columns: repeat(8, 32px);
+            gap: 1px;
+            background: #ddd;
+            padding: 1px;
+            margin-bottom: 10px;
+            position: relative;
+            width: calc(8 * 32px + 7px);  
+            height: calc(6 * 32px + 5px);  
+        }
+        .tile {
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            position: relative;
+            background: transparent;
+        }
+        .tile:hover {
+            outline: 2px solid #4CAF50;
+        }
+        .tile.selected {
+            outline: 2px solid #2196F3;
+        }
+        .tile::after {
+            content: attr(data-index);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10px;
+            color: white;
+            text-shadow: 1px 1px 1px black;
+            pointer-events: none;
+        }
+        #tilesetImage {
+            position: absolute;
+            top: 1px;
+            left: 1px;
+            width: calc(8 * 32px + 7px);  
+            height: calc(6 * 32px + 5px);  
+            image-rendering: pixelated;  
+            pointer-events: none;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        .controls button {
+            margin-right: 10px;
+        }
+        #output {
+            width: 100%;
+            height: 200px;
+            margin-top: 20px;
+        }
+        .info {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Simple Tile Mapper</h2>
+    <div class="container">
+        <div class="config-viewer">
+            <h3>Current Configuration (<span id="currentIndex">0</span>/255)</h3>
+            <div id="miniGrid" class="mini-grid"></div>
+            <div class="info">
+                Binary: <span id="binaryValue">00000000</span><br>
+                Selected Tile: <span id="selectedTile">None</span>
+            </div>
+            <div class="controls">
+                <button onclick="prevConfig()">&lt; Previous</button>
+                <button onclick="nextConfig()">Next &gt;</button>
+                <button onclick="generateCode()">Generate Code</button>
+            </div>
+        </div>
+        <div class="tileset-viewer">
+            <h3>Tileset (click to select)</h3>
+            <div id="tileset" class="tileset">
+                <img id="tilesetImage" src="exampletileset.png" alt="Tileset">
+            </div>
+        </div>
+    </div>
+    <textarea id="output"></textarea>
+
+    <script>
+        let currentConfig = 0;
+        const tileConfigs = new Array(256).fill(0);
+        
+        function createMiniGrid(num) {
+            const grid = document.getElementById('miniGrid');
+            grid.innerHTML = '';
+            
+            const binary = num.toString(2).padStart(8, '0');
+            document.getElementById('binaryValue').textContent = binary;
+            
+            for(let y = 0; y < 3; y++) {
+                for(let x = 0; x < 3; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    
+                    if(x === 1 && y === 1) {
+                        cell.className += ' active';
+                    } else {
+                        let index;
+                        if(y === 0) {
+                            if(x === 0) index = 0;
+                            if(x === 1) index = 1;
+                            if(x === 2) index = 2;
+                        } else if(y === 1) {
+                            if(x === 0) index = 7;
+                            if(x === 2) index = 3;
+                        } else if(y === 2) {
+                            if(x === 0) index = 6;
+                            if(x === 1) index = 5;
+                            if(x === 2) index = 4;
+                        }
+                        
+                        if(index !== undefined && binary[7-index] === '1') {
+                            cell.className += ' active';
+                        }
+                    }
+                    
+                    grid.appendChild(cell);
+                }
+            }
+        }
+
+        function createTileset() {
+            const tileset = document.getElementById('tileset');
+            // Wait for the image to load to ensure proper sizing
+            const img = document.getElementById('tilesetImage');
+            img.onload = () => {
+                for(let i = 1; i <= 47; i++) {
+                    const tile = document.createElement('div');
+                    tile.className = 'tile';
+                    tile.setAttribute('data-index', i);
+                    tile.onclick = () => selectTile(i);
+                    tileset.appendChild(tile);
+                }
+            };
+        }
+
+        function selectTile(index) {
+            document.querySelectorAll('.tile').forEach(tile => {
+                tile.classList.remove('selected');
+            });
+            document.querySelector(`.tile[data-index="${index}"]`).classList.add('selected');
+            
+            tileConfigs[currentConfig] = index;
+            document.getElementById('selectedTile').textContent = index;
+            
+            // Automatically advance to next configuration
+            nextConfig();
+        }
+
+        function updateDisplay() {
+            document.getElementById('currentIndex').textContent = currentConfig;
+            createMiniGrid(currentConfig);
+            
+            // Update selected tile if one is set
+            document.querySelectorAll('.tile').forEach(tile => {
+                tile.classList.remove('selected');
+            });
+            if(tileConfigs[currentConfig]) {
+                const tile = document.querySelector(`.tile[data-index="${tileConfigs[currentConfig]}"]`);
+                if(tile) tile.classList.add('selected');
+                document.getElementById('selectedTile').textContent = tileConfigs[currentConfig];
+            } else {
+                document.getElementById('selectedTile').textContent = 'None';
+            }
+        }
+
+        function prevConfig() {
+            currentConfig = (currentConfig - 1 + 256) % 256;
+            updateDisplay();
+        }
+
+        function nextConfig() {
+            currentConfig = (currentConfig + 1) % 256;
+            updateDisplay();
+        }
+
+        function generateCode() {
+            const output = document.getElementById('output');
+            let code = 'const tileMap = [\n    ';
+            
+            for(let i = 0; i < tileConfigs.length; i++) {
+                code += (tileConfigs[i] || 1);
+                if(i < tileConfigs.length - 1) {
+                    code += ', ';
+                    if((i + 1) % 16 === 0) {
+                        code += '\n    ';
+                    }
+                }
+            }
+            
+            code += '\n];';
+            output.value = code;
+        }
+
+        // Initialize
+        createTileset();
+        updateDisplay();
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if(e.key === 'ArrowLeft') prevConfig();
+            if(e.key === 'ArrowRight') nextConfig();
+            if(e.key >= '1' && e.key <= '9') {
+                const num = parseInt(e.key);
+                if(num <= 4) selectTile(num);
+            }
+        });
+    </script>
+</body>
+</html>
