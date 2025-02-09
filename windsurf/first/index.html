@@ -3,68 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Autotiling Demo</title>
+    <title>Fullscreen Canvas</title>
     <style>
-        body {
+        * {
             margin: 0;
+            padding: 0;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
             overflow: hidden;
-            background: #1a1a1a;
         }
+        
         #gameCanvas {
-            display: block;
-        }
-        .images {
-            display: none;
-        }
-        #controls {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            z-index: 100;
-            display: flex;
-            gap: 10px;
-        }
-        button {
-            padding: 8px 16px;
-            font-size: 14px;
-            cursor: pointer;
-            background: #2ecc71;
-            border: none;
-            color: white;
-            border-radius: 4px;
-        }
-        button:hover {
-            background: #27ae60;
-        }
-        button.active {
-            background: #e74c3c;
-        }
-        .hint {
-            color: white;
-            background: rgba(0,0,0,0.7);
-            padding: 8px 16px;
-            border-radius: 4px;
-            font-size: 14px;
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
 <body>
-    <div id="controls">
-        <button id="tileset1" class="active">Tileset 1</button>
-        <button id="tileset2">Tileset 2</button>
-        <button id="clear">Clear</button>
-        <button id="random">Random</button>
-        <span class="hint">Hold Alt for Tileset 2</span>
-    </div>
-
+    <img id="tileset" src="tileset.png" style="display: none;">
+    <img id="tileset2" src="tileset2.png" style="display: none;">
+    <img id="plr" src="plr.png" style="display: none;">
     <canvas id="gameCanvas"></canvas>
-
-    <div class="images">
-        <img id="tileset1Image" src="gms2exampletileset.png">
-        <img id="tileset2Image" src="gms2exampletileset2.png">
-    </div>
-
-    <script src="tileset.js"></script>
+    <script>
+        // Sprite configurations
+        const SPRITE_CONFIG = {
+            "player": {
+                "image": "plr.png",
+                "frameSize": {
+                    "width": 44,
+                    "height": 44
+                },
+                "hitbox": {
+                    "width": 8,
+                    "height": 8,
+                    "offset": {
+                        "x": 18,
+                        "y": 22
+                    }
+                },
+                "shadow": {
+                    "width": 3,
+                    "height": 2,
+                    "offset": {
+                        "x": 22,
+                        "y": 29
+                    },
+                    "color": "rgba(0, 0, 0, 0.2)"
+                },
+                "directions": ["SE", "S", "SW", "W", "NW", "N", "NE", "E"],
+                "animations": {
+                    "idle": {
+                        "frames": 4,
+                        "frameTimes": [100, 100, 100, 100],
+                        "position": {
+                            "frameX": 5,  
+                            "frameY": 17  
+                        }
+                    },
+                    "run": {
+                        "frames": 4,
+                        "frameTimes": [100, 100, 100, 100],
+                        "position": {
+                            "frameX": 0,
+                            "frameY": 17  
+                        }
+                    },
+                    "action": {
+                        "frames": 4,
+                        "frameTimes": [50, 50, 150, 100],
+                        "position": {
+                            "frameX": 10,
+                            "frameY": 17
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <script src="tiles.js"></script>
+    <script src="worldgen.js"></script>
+    <script src="player.js"></script>
+    <script src="camera.js"></script>
     <script src="canvas.js"></script>
 </body>
 </html>

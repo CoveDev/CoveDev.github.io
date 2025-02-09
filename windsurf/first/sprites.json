@@ -1,0 +1,44 @@
+{
+    "player": {
+        "image": "plr.png",
+        "frameSize": {
+            "width": 44,
+            "height": 44
+        },
+        "hitbox": {
+            "width": 8,
+            "height": 8,
+            "offset": {
+                "x": 18,
+                "y": 22
+            }
+        },
+        "directions": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
+        "animations": {
+            "idle": {
+                "frames": 4,
+                "frameTime": 100,
+                "position": {
+                    "x": 0,
+                    "y": 0
+                }
+            },
+            "run": {
+                "frames": 4,
+                "frameTime": 100,
+                "position": {
+                    "x": 0,
+                    "y": 352
+                }
+            },
+            "action": {
+                "frames": 8,
+                "frameTime": 100,
+                "position": {
+                    "x": 0,
+                    "y": 704
+                }
+            }
+        }
+    }
+}
