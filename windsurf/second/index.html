@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML5 Game Canvas</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #000;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #upgradeMenu {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            font-family: Arial, sans-serif;
+            user-select: none;
+        }
+
+        .upgrade-button {
+            display: block;
+            margin: 10px 0;
+            padding: 8px 15px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            width: 200px;
+            text-align: left;
+        }
+
+        .upgrade-button:hover {
+            background: #45a049;
+        }
+
+        .upgrade-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="upgradeMenu">
+        <h3>Upgrades</h3>
+        <button id="speedUpgrade" class="upgrade-button">Speed (Cost: 10)</button>
+        <button id="damageUpgrade" class="upgrade-button">Damage (Cost: 15)</button>
+        <button id="fireRateUpgrade" class="upgrade-button">Fire Rate (Cost: 20)</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game objects
+        const character = {
+            x: 0,          // World coordinates
+            y: 0,
+            width: 50,
+            height: 50,
+            speed: 5,
+            color: '#ff0000',
+            resources: 0,
+            upgrades: {
+                speed: 0,
+                damage: 0,
+                fireRate: 0
+            },
+            abilities: {
+                spreadShot: { cooldown: 0, maxCooldown: 5000 },
+                acidBomb: { cooldown: 0, maxCooldown: 8000 },
+                dash: { cooldown: 0, maxCooldown: 3000, active: false, duration: 200 }
+            }
+        };
+
+        const camera = {
+            x: 0,          // Camera position in world coordinates
+            y: 0,
+            followTarget: function(target) {
+                // Center the camera on the target
+                this.x = target.x - canvas.width / 2 + target.width / 2;
+                this.y = target.y - canvas.height / 2 + target.height / 2;
+            }
+        };
+
+        // Mouse position in screen coordinates
+        const mouse = {
+            x: 0,
+            y: 0
+        };
+
+        // Game entities
+        const projectiles = [];
+        const resourceEntities = [];
+        const resources = [];
+        const particles = [];
+        const hazards = [];
+
+        const PROJECTILE_SPEED = 10;
+        const PROJECTILE_SIZE = 10;
+        const PROJECTILE_DAMAGE = 10;
+        const RESOURCE_SPAWN_INTERVAL = 5000; // milliseconds
+        const RESOURCE_ENTITY_SIZE = 80;
+        const RESOURCE_SIZE = 20;
+
+        const upgradeCosts = {
+            speed: 10,
+            damage: 15,
+            fireRate: 20
+        };
+
+        const upgradeMultipliers = {
+            speed: 1.2,
+            damage: 1.5,
+            fireRate: 1.3
+        };
+
+        // Entity types configuration
+        const ENTITY_TYPES = {
+            NORMAL: {
+                color: '#8B4513',
+                size: 80,
+                health: 100,
+                resourceValue: 5,
+                speed: 0,
+                behavior: 'static'
+            },
+            TOUGH: {
+                color: '#4A2511',
+                size: 100,
+                health: 200,
+                resourceValue: 12,
+                speed: 0,
+                behavior: 'static'
+            },
+            FAST: {
+                color: '#CD853F',
+                size: 60,
+                health: 50,
+                resourceValue: 8,
+                speed: 3,
+                behavior: 'circle'
+            },
+            SPAWNER: {
+                color: '#8B008B',
+                size: 90,
+                health: 150,
+                resourceValue: 15,
+                speed: 0,
+                behavior: 'spawn',
+                spawnInterval: 5000
+            }
+        };
+
+        class ResourceEntity {
+            constructor(x, y, type = 'NORMAL') {
+                const config = ENTITY_TYPES[type];
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.size = config.size;
+                this.maxHealth = config.health;
+                this.health = this.maxHealth;
+                this.resourceValue = config.resourceValue;
+                this.color = config.color;
+                this.speed = config.speed;
+                this.behavior = config.behavior;
+                this.hitFlash = 0;
+                this.knockbackX = 0;
+                this.knockbackY = 0;
+                this.angle = Math.random() * Math.PI * 2;
+                this.lastSpawnTime = Date.now();
+            }
+
+            takeDamage(damage, knockbackX, knockbackY) {
+                this.health -= damage;
+                // Add hit flash effect
+                this.hitFlash = 1;
+                // Add knockback effect
+                this.knockbackX = knockbackX * 5;
+                this.knockbackY = knockbackY * 5;
+                
+                if (this.health <= 0) {
+                    // Drop resources when destroyed
+                    for (let i = 0; i < this.resourceValue; i++) {
+                        resources.push(new Resource(
+                            this.x + (Math.random() - 0.5) * this.size,
+                            this.y + (Math.random() - 0.5) * this.size
+                        ));
+                    }
+                    return true; // Entity destroyed
+                }
+                return false;
+            }
+
+            update() {
+                // Update hit flash and knockback
+                if (this.hitFlash > 0) {
+                    this.hitFlash = Math.max(0, this.hitFlash - 0.1);
+                }
+                if (this.knockbackX !== 0 || this.knockbackY !== 0) {
+                    this.x += this.knockbackX;
+                    this.y += this.knockbackY;
+                    this.knockbackX *= 0.8;
+                    this.knockbackY *= 0.8;
+                    if (Math.abs(this.knockbackX) < 0.1) this.knockbackX = 0;
+                    if (Math.abs(this.knockbackY) < 0.1) this.knockbackY = 0;
+                }
+
+                // Update behavior
+                switch (this.behavior) {
+                    case 'circle':
+                        this.angle += 0.02;
+                        this.x += Math.cos(this.angle) * this.speed;
+                        this.y += Math.sin(this.angle) * this.speed;
+                        break;
+                    case 'spawn':
+                        const currentTime = Date.now();
+                        if (currentTime - this.lastSpawnTime >= ENTITY_TYPES.SPAWNER.spawnInterval) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const distance = 100;
+                            resourceEntities.push(new ResourceEntity(
+                                this.x + Math.cos(angle) * distance,
+                                this.y + Math.sin(angle) * distance,
+                                'FAST'
+                            ));
+                            this.lastSpawnTime = currentTime;
+                        }
+                        break;
+                }
+            }
+
+            draw() {
+                // Draw entity with hit flash effect
+                ctx.fillStyle = this.hitFlash > 0 
+                    ? `rgba(255, 255, 255, ${this.hitFlash})` 
+                    : this.color;
+                
+                if (this.type === 'SPAWNER') {
+                    // Draw spawner with spikes
+                    const centerX = this.x + this.size / 2 - camera.x;
+                    const centerY = this.y + this.size / 2 - camera.y;
+                    const innerRadius = this.size / 2 - 10;
+                    const outerRadius = this.size / 2;
+                    const spikes = 8;
+
+                    ctx.beginPath();
+                    for (let i = 0; i < spikes * 2; i++) {
+                        const angle = (i * Math.PI) / spikes;
+                        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                        const x = centerX + Math.cos(angle) * radius;
+                        const y = centerY + Math.sin(angle) * radius;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                } else {
+                    // Draw regular entity
+                    ctx.fillRect(
+                        this.x - camera.x,
+                        this.y - camera.y,
+                        this.size,
+                        this.size
+                    );
+
+                    // Draw hit flash overlay
+                    if (this.hitFlash > 0) {
+                        ctx.fillStyle = `rgba(255, 255, 255, ${this.hitFlash})`;
+                        ctx.fillRect(
+                            this.x - camera.x,
+                            this.y - camera.y,
+                            this.size,
+                            this.size
+                        );
+                    }
+                }
+
+                // Draw health bar
+                const healthBarWidth = this.size;
+                const healthBarHeight = 10;
+                const healthPercentage = this.health / this.maxHealth;
+
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(
+                    this.x - camera.x,
+                    this.y - camera.y - 20,
+                    healthBarWidth,
+                    healthBarHeight
+                );
+
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(
+                    this.x - camera.x,
+                    this.y - camera.y - 20,
+                    healthBarWidth * healthPercentage,
+                    healthBarHeight
+                );
+
+                // Draw damage number
+                if (this.hitFlash > 0) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${this.hitFlash})`;
+                    ctx.font = '20px Arial';
+                    ctx.textAlign = 'center';
+                    const damage = PROJECTILE_DAMAGE * Math.pow(upgradeMultipliers.damage, character.upgrades.damage);
+                    ctx.fillText(
+                        `-${damage}`,
+                        this.x - camera.x + this.size / 2,
+                        this.y - camera.y - 30
+                    );
+                    ctx.textAlign = 'left';
+                }
+            }
+
+            checkCollision(projectile) {
+                return projectile.x > this.x &&
+                    projectile.x < this.x + this.size &&
+                    projectile.y > this.y &&
+                    projectile.y < this.y + this.size;
+            }
+        }
+
+        class Resource {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = RESOURCE_SIZE;
+                this.collected = false;
+            }
+
+            draw() {
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(
+                    this.x - camera.x,
+                    this.y - camera.y,
+                    this.size,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+
+            checkCollection(player) {
+                const dx = this.x - (player.x + player.width / 2);
+                const dy = this.y - (player.y + player.height / 2);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < this.size + player.width / 2;
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color, velocity, size, life, gravity = false) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.velocity = velocity;
+                this.size = size;
+                this.life = life;
+                this.maxLife = life;
+                this.gravity = gravity;
+            }
+
+            update() {
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+                if (this.gravity) {
+                    this.velocity.y += 0.2;
+                }
+                this.life--;
+                return this.life > 0;
+            }
+
+            draw() {
+                const alpha = this.life / this.maxLife;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(
+                    this.x - camera.x,
+                    this.y - camera.y,
+                    this.size * alpha,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class Hazard {
+            constructor(x, y, type = 'acid') {
+                this.x = x;
+                this.y = y;
+                this.size = 100;
+                this.type = type;
+                this.life = 5000;
+                this.maxLife = 5000;
+                this.damage = 10;
+            }
+
+            update() {
+                this.life--;
+                return this.life > 0;
+            }
+
+            draw() {
+                const alpha = this.life / this.maxLife;
+                ctx.globalAlpha = alpha * 0.6;
+                ctx.fillStyle = this.type === 'acid' ? '#32CD32' : '#FF4500';
+                ctx.beginPath();
+                ctx.arc(
+                    this.x - camera.x,
+                    this.y - camera.y,
+                    this.size,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+
+            checkCollision(entity) {
+                const dx = this.x - (entity.x + entity.width / 2);
+                const dy = this.y - (entity.y + entity.height / 2);
+                return Math.sqrt(dx * dx + dy * dy) < this.size;
+            }
+        }
+
+        function createParticles(x, y, count, color, size, life, spread, speed, gravity = false) {
+            for (let i = 0; i < count; i++) {
+                const angle = (Math.random() * spread) - (spread / 2);
+                const velocity = {
+                    x: Math.cos(angle) * (Math.random() * speed),
+                    y: Math.sin(angle) * (Math.random() * speed)
+                };
+                particles.push(new Particle(x, y, color, velocity, size, life, gravity));
+            }
+        }
+
+        function updateProjectiles() {
+            // Update projectiles and check collisions
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const projectile = projectiles[i];
+                projectile.update();
+
+                // Check for collision with resource entities
+                for (let j = resourceEntities.length - 1; j >= 0; j--) {
+                    const entity = resourceEntities[j];
+                    if (entity.checkCollision(projectile)) {
+                        // Calculate knockback direction - from projectile to entity center
+                        const entityCenterX = entity.x + entity.size / 2;
+                        const entityCenterY = entity.y + entity.size / 2;
+                        const dx = entityCenterX - projectile.x;
+                        const dy = entityCenterY - projectile.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        const knockbackX = dx / dist;
+                        const knockbackY = dy / dist;
+
+                        // Apply damage and knockback
+                        const damage = PROJECTILE_DAMAGE * Math.pow(upgradeMultipliers.damage, character.upgrades.damage);
+                        if (entity.takeDamage(damage, knockbackX, knockbackY)) {
+                            resourceEntities.splice(j, 1);
+                            // Create destruction particles
+                            createParticles(
+                                entity.x + entity.size / 2,
+                                entity.y + entity.size / 2,
+                                15,
+                                entity.color,
+                                5,
+                                30,
+                                Math.PI * 2,
+                                3,
+                                true
+                            );
+                        }
+                        // Create hit particles
+                        createParticles(
+                            projectile.x,
+                            projectile.y,
+                            5,
+                            '#ffffff',
+                            3,
+                            15,
+                            Math.PI,
+                            2
+                        );
+                        projectiles.splice(i, 1);
+                        break;
+                    }
+                }
+
+                // Remove projectiles that are off screen
+                const margin = 100;
+                if (
+                    projectile.x < character.x - canvas.width/2 - margin ||
+                    projectile.x > character.x + canvas.width/2 + margin ||
+                    projectile.y < character.y - canvas.height/2 - margin ||
+                    projectile.y > character.y + canvas.height/2 + margin
+                ) {
+                    projectiles.splice(i, 1);
+                }
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                if (!particles[i].update()) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function updateUpgradeButtons() {
+            speedUpgradeBtn.disabled = character.resources < upgradeCosts.speed;
+            damageUpgradeBtn.disabled = character.resources < upgradeCosts.damage;
+            fireRateUpgradeBtn.disabled = character.resources < upgradeCosts.fireRate;
+
+            speedUpgradeBtn.textContent = `Speed (Cost: ${upgradeCosts.speed}) [Lvl ${character.upgrades.speed}]`;
+            damageUpgradeBtn.textContent = `Damage (Cost: ${upgradeCosts.damage}) [Lvl ${character.upgrades.damage}]`;
+            fireRateUpgradeBtn.textContent = `Fire Rate (Cost: ${upgradeCosts.fireRate}) [Lvl ${character.upgrades.fireRate}]`;
+        }
+
+        // Upgrade buttons
+        const speedUpgradeBtn = document.getElementById('speedUpgrade');
+        const damageUpgradeBtn = document.getElementById('damageUpgrade');
+        const fireRateUpgradeBtn = document.getElementById('fireRateUpgrade');
+
+        let lastShotTime = 0;
+        const baseFireCooldown = 250; // milliseconds between shots
+
+        class Projectile {
+            constructor(x, y, directionX, directionY) {
+                this.x = x;
+                this.y = y;
+                this.size = PROJECTILE_SIZE;
+                // Normalize direction vector
+                const length = Math.sqrt(directionX * directionX + directionY * directionY);
+                this.dx = (directionX / length) * PROJECTILE_SPEED;
+                this.dy = (directionY / length) * PROJECTILE_SPEED;
+
+                // Projectile variations based on upgrades
+                const damageLevel = character.upgrades.damage;
+                if (damageLevel >= 5) {
+                    this.size = PROJECTILE_SIZE * 1.5;
+                    this.color = '#ff4400';
+                } else if (damageLevel >= 3) {
+                    this.size = PROJECTILE_SIZE * 1.2;
+                    this.color = '#ffaa00';
+                } else {
+                    this.color = '#ffff00';
+                }
+            }
+
+            update() {
+                this.x += this.dx;
+                this.y += this.dy;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(
+                    this.x - camera.x,
+                    this.y - camera.y,
+                    this.size,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+        }
+
+        speedUpgradeBtn.addEventListener('click', () => {
+            if (character.resources >= upgradeCosts.speed) {
+                character.resources -= upgradeCosts.speed;
+                character.upgrades.speed++;
+                character.speed = 5 * Math.pow(upgradeMultipliers.speed, character.upgrades.speed);
+                upgradeCosts.speed = Math.floor(upgradeCosts.speed * 1.5);
+                updateUpgradeButtons();
+            }
+        });
+
+        damageUpgradeBtn.addEventListener('click', () => {
+            if (character.resources >= upgradeCosts.damage) {
+                character.resources -= upgradeCosts.damage;
+                character.upgrades.damage++;
+                upgradeCosts.damage = Math.floor(upgradeCosts.damage * 1.5);
+                updateUpgradeButtons();
+            }
+        });
+
+        fireRateUpgradeBtn.addEventListener('click', () => {
+            if (character.resources >= upgradeCosts.fireRate) {
+                character.resources -= upgradeCosts.fireRate;
+                character.upgrades.fireRate++;
+                upgradeCosts.fireRate = Math.floor(upgradeCosts.fireRate * 1.5);
+                updateUpgradeButtons();
+            }
+        });
+
+        function drawWorld() {
+            // Clear the canvas
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw a grid to show movement
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 1;
+            const gridSize = 100;
+            const offsetX = -camera.x % gridSize;
+            const offsetY = -camera.y % gridSize;
+
+            for (let x = offsetX; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = offsetY; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Draw particles
+            particles.forEach(particle => particle.draw());
+
+            // Draw resource entities
+            resourceEntities.forEach(entity => entity.draw());
+
+            // Draw resources
+            resources.forEach(resource => resource.draw());
+
+            // Draw projectiles
+            projectiles.forEach(projectile => projectile.draw());
+
+            // Draw hazards
+            hazards.forEach(hazard => hazard.draw());
+
+            // Draw character relative to camera
+            ctx.fillStyle = character.color;
+            ctx.fillRect(
+                character.x - camera.x,
+                character.y - camera.y,
+                character.width,
+                character.height
+            );
+
+            // Draw resource counter (fixed position, no screen shake)
+            ctx.fillStyle = '#FFD700';
+            ctx.font = '24px Arial';
+            ctx.fillText(`Resources: ${character.resources}`, 20, 40);
+
+            // Update upgrade buttons
+            updateUpgradeButtons();
+        }
+
+        function drawUI() {
+            // Draw ability cooldowns
+            const barHeight = 10;
+            const barWidth = 50;
+            const barSpacing = 20;
+            const startY = canvas.height - 40;
+            
+            // Draw cooldown bars
+            function drawCooldownBar(x, cooldown, baseColor) {
+                // Background
+                ctx.fillStyle = cooldown > 0 ? '#666' : baseColor;
+                ctx.fillRect(x, startY, barWidth, barHeight);
+                
+                // Progress
+                ctx.fillStyle = baseColor;
+                ctx.fillRect(x, startY, barWidth * (1 - cooldown), barHeight);
+            }
+            
+            // Spread Shot
+            const spreadCooldown = character.abilities.spreadShot.cooldown / character.abilities.spreadShot.maxCooldown;
+            drawCooldownBar(10, spreadCooldown, '#4CAF50');
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Arial';
+            ctx.fillText('Q', 10, startY - 5);
+
+            // Acid Bomb
+            const acidCooldown = character.abilities.acidBomb.cooldown / character.abilities.acidBomb.maxCooldown;
+            drawCooldownBar(10 + barWidth + barSpacing, acidCooldown, '#32CD32');
+            ctx.fillStyle = '#fff';
+            ctx.fillText('E', 10 + barWidth + barSpacing, startY - 5);
+
+            // Dash
+            const dashCooldown = character.abilities.dash.cooldown / character.abilities.dash.maxCooldown;
+            drawCooldownBar(10 + (barWidth + barSpacing) * 2, dashCooldown, '#3498db');
+            ctx.fillStyle = '#fff';
+            ctx.fillText('SPACE', 10 + (barWidth + barSpacing) * 2, startY - 5);
+        }
+
+        function updateAbilities() {
+            const now = Date.now();
+            
+            // Update cooldowns
+            Object.values(character.abilities).forEach(ability => {
+                if (ability.cooldown > 0) {
+                    ability.cooldown = Math.max(0, ability.cooldown - 16.67); // 60fps
+                }
+            });
+
+            // Update dash
+            if (character.abilities.dash.active) {
+                character.abilities.dash.duration -= 16.67;
+                if (character.abilities.dash.duration <= 0) {
+                    character.abilities.dash.active = false;
+                    character.abilities.dash.duration = 200;
+                }
+            }
+        }
+
+        function updateHazards() {
+            for (let i = hazards.length - 1; i >= 0; i--) {
+                if (!hazards[i].update()) {
+                    hazards.splice(i, 1);
+                    continue;
+                }
+                
+                // Check character collision with hazards
+                if (hazards[i].checkCollision(character)) {
+                    createParticles(
+                        character.x + character.width/2,
+                        character.y + character.height/2,
+                        3,
+                        '#ff0000',
+                        5,
+                        20,
+                        Math.PI * 2,
+                        2
+                    );
+                }
+            }
+        }
+
+        function updateCharacter() {
+            const baseSpeed = character.speed * Math.pow(upgradeMultipliers.speed, character.upgrades.speed);
+            const currentSpeed = character.abilities.dash.active ? baseSpeed * 3 : baseSpeed;
+            
+            if (keys.w || keys.ArrowUp) character.y -= currentSpeed;
+            if (keys.s || keys.ArrowDown) character.y += currentSpeed;
+            if (keys.a || keys.ArrowLeft) character.x -= currentSpeed;
+            if (keys.d || keys.ArrowRight) character.x += currentSpeed;
+
+            // Update camera to follow character
+            camera.followTarget(character);
+            
+            // Create dash trail
+            if (character.abilities.dash.active) {
+                createParticles(
+                    character.x + character.width/2,
+                    character.y + character.height/2,
+                    1,
+                    '#3498db',
+                    3,
+                    10,
+                    Math.PI * 2,
+                    2
+                );
+            }
+
+            // Check for resource collection
+            for (let i = resources.length - 1; i >= 0; i--) {
+                if (resources[i].checkCollection(character)) {
+                    // Collection effect
+                    createParticles(
+                        resources[i].x,
+                        resources[i].y,
+                        10,
+                        '#FFD700',
+                        3,
+                        20,
+                        Math.PI * 2,
+                        3
+                    );
+                    character.resources++;
+                    resources.splice(i, 1);
+                }
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update game state
+            resourceEntities.forEach(entity => entity.update());
+            updateCharacter();
+            updateProjectiles();
+            updateParticles();
+            updateAbilities();
+            updateHazards();
+            
+            // Draw everything
+            drawWorld();
+            drawUI();
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Event listeners for abilities
+        window.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'q':
+                    if (character.abilities.spreadShot.cooldown <= 0) {
+                        // Spread shot
+                        const angles = [-0.4, -0.2, 0, 0.2, 0.4];
+                        const mouseAngle = Math.atan2(
+                            mouse.y + camera.y - (character.y + character.height/2),
+                            mouse.x + camera.x - (character.x + character.width/2)
+                        );
+                        
+                        angles.forEach(offset => {
+                            const angle = mouseAngle + offset;
+                            projectiles.push(new Projectile(
+                                character.x + character.width/2,
+                                character.y + character.height/2,
+                                Math.cos(angle) * PROJECTILE_SPEED,
+                                Math.sin(angle) * PROJECTILE_SPEED
+                            ));
+                        });
+                        
+                        character.abilities.spreadShot.cooldown = character.abilities.spreadShot.maxCooldown;
+                    }
+                    break;
+                    
+                case 'e':
+                    if (character.abilities.acidBomb.cooldown <= 0) {
+                        // Drop acid pool
+                        hazards.push(new Hazard(
+                            character.x + character.width/2,
+                            character.y + character.height/2
+                        ));
+                        
+                        character.abilities.acidBomb.cooldown = character.abilities.acidBomb.maxCooldown;
+                    }
+                    break;
+                    
+                case ' ':
+                    if (character.abilities.dash.cooldown <= 0) {
+                        // Dash
+                        character.abilities.dash.active = true;
+                        character.abilities.dash.cooldown = character.abilities.dash.maxCooldown;
+                        
+                        // Create dash particles
+                        createParticles(
+                            character.x + character.width/2,
+                            character.y + character.height/2,
+                            10,
+                            '#3498db',
+                            5,
+                            20,
+                            Math.PI * 2,
+                            5
+                        );
+                    }
+                    break;
+            }
+        });
+
+        // Handle keyboard input
+        const keys = {};
+        window.addEventListener('keydown', (e) => keys[e.key] = true);
+        window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        // Handle mouse movement
+        canvas.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        // Handle mouse clicks
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Left click
+                const currentTime = Date.now();
+                const fireCooldown = baseFireCooldown / Math.pow(upgradeMultipliers.fireRate, character.upgrades.fireRate);
+                
+                if (currentTime - lastShotTime >= fireCooldown) {
+                    // Calculate direction from character to mouse
+                    const targetX = mouse.x + camera.x;
+                    const targetY = mouse.y + camera.y;
+                    const directionX = targetX - (character.x + character.width / 2);
+                    const directionY = targetY - (character.y + character.height / 2);
+                    const angle = Math.atan2(directionY, directionX);
+                    
+                    // Create new projectile
+                    projectiles.push(new Projectile(
+                        character.x + character.width / 2,
+                        character.y + character.height / 2,
+                        directionX,
+                        directionY
+                    ));
+
+                    // Muzzle flash effect
+                    createParticles(
+                        character.x + character.width / 2,
+                        character.y + character.height / 2,
+                        5, '#ffff00', 3, 10, Math.PI / 4, 3
+                    );
+
+                    lastShotTime = currentTime;
+                }
+            }
+        });
+
+        // Initial resize
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        // Resize canvas when window size changes
+        window.addEventListener('resize', resizeCanvas);
+
+        resizeCanvas();
+
+        // Initial resource entities
+        for (let i = 0; i < 10; i++) {
+            const spawnRadius = 1000;
+            const angle = Math.random() * Math.PI * 2;
+            const x = character.x + Math.cos(angle) * spawnRadius;
+            const y = character.y + Math.sin(angle) * spawnRadius;
+            
+            // Random entity type selection with weights
+            const rand = Math.random();
+            let type;
+            if (rand < 0.5) type = 'NORMAL';
+            else if (rand < 0.8) type = 'FAST';
+            else if (rand < 0.95) type = 'TOUGH';
+            else type = 'SPAWNER';
+            
+            resourceEntities.push(new ResourceEntity(x, y, type));
+        }
+
+        // Spawn new resource entities periodically
+        setInterval(() => {
+            const spawnRadius = 1000;
+            const angle = Math.random() * Math.PI * 2;
+            const x = character.x + Math.cos(angle) * spawnRadius;
+            const y = character.y + Math.sin(angle) * spawnRadius;
+            
+            // Random entity type selection with weights
+            const rand = Math.random();
+            let type;
+            if (rand < 0.5) type = 'NORMAL';
+            else if (rand < 0.8) type = 'FAST';
+            else if (rand < 0.95) type = 'TOUGH';
+            else type = 'SPAWNER';
+            
+            resourceEntities.push(new ResourceEntity(x, y, type));
+        }, RESOURCE_SPAWN_INTERVAL);
+
+        animate();
+    </script>
+</body>
+</html>
