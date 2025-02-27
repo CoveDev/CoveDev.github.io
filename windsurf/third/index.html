@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tile-based RPG</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background: #2a5931;
+        }
+
+        #ui-overlay {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.5);
+        }
+
+        #level-up-menu {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #4CAF50;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            min-width: 300px;
+            z-index: 1000;
+        }
+
+        .skill-choice {
+            margin: 10px;
+            padding: 15px;
+            background: #2a5931;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .skill-choice:hover {
+            background: #4CAF50;
+            transform: scale(1.05);
+        }
+
+        .skill-title {
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 5px;
+        }
+
+        .skill-description {
+            font-size: 0.9em;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui-overlay">
+        Level: <span id="level">1</span> | 
+        XP: <span id="xp">0</span> / <span id="next-level">100</span> | 
+        HP: <span id="hp">100</span> / <span id="max-hp">100</span>
+    </div>
+    <div id="level-up-menu">
+        <h2>Level Up!</h2>
+        <p>Choose your upgrade:</p>
+        <div id="skill-choices"></div>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game constants
+        const TILE_SIZE = 64;
+        const PLAYER_SIZE = 40;
+        const ENEMY_SIZE = 40;
+        const LOOT_SIZE = 20;
+
+        // Enemy States
+        const ENEMY_STATES = {
+            IDLE: 'idle',
+            PATROL: 'patrol',
+            CHASE: 'chase',
+            ATTACK: 'attack',
+            STUNNED: 'stunned'
+        };
+
+        // Loot Types
+        const LOOT_TYPES = {
+            GOLD: { color: '#FFD700', value: 10, xp: 5 },
+            HEALTH: { color: '#FF6B6B', value: 20, healing: 20 },
+            WEAPON: { color: '#4169E1', value: 50, damage: 10 }
+        };
+
+        // Enemy Types
+        const ENEMY_TYPES = {
+            SLIME: {
+                color: '#00ff00',
+                hp: 30,
+                damage: 5,
+                speed: 2,
+                patrolSpeed: 1,
+                detectionRange: TILE_SIZE * 4,
+                size: 35,
+                xpValue: 10,
+                name: 'Slime',
+                attackWindup: 30,    // 0.5 seconds
+                attackEndlag: 20,    // 0.33 seconds
+                attackCooldown: 90   // 1.5 seconds
+            },
+            SKELETON: {
+                color: '#808080',
+                hp: 45,
+                damage: 15,
+                speed: 3,
+                patrolSpeed: 1.5,
+                detectionRange: TILE_SIZE * 5,
+                size: 40,
+                xpValue: 20,
+                name: 'Skeleton',
+                attackWindup: 25,    // 0.42 seconds
+                attackEndlag: 25,    // 0.42 seconds
+                attackCooldown: 75   // 1.25 seconds
+            },
+            DEMON: {
+                color: '#800000',
+                hp: 80,
+                damage: 20,
+                speed: 1.5,
+                patrolSpeed: 1.2,
+                detectionRange: TILE_SIZE * 6,
+                size: 50,
+                xpValue: 40,
+                name: 'Demon',
+                attackWindup: 45,    // 0.75 seconds
+                attackEndlag: 35,    // 0.58 seconds
+                attackCooldown: 120  // 2 seconds
+            }
+        };
+
+        // Tile types
+        const TILES = {
+            GRASS: 0,
+            WATER: 1,
+            TREE: 2,
+            STONE: 3
+        };
+
+        // Tile colors and properties
+        const TILE_PROPERTIES = {
+            [TILES.GRASS]: { color: '#458B00', walkable: true },
+            [TILES.WATER]: { color: '#4169E1', walkable: false },
+            [TILES.TREE]: { color: '#228B22', walkable: false },
+            [TILES.STONE]: { color: '#808080', walkable: false }
+        };
+
+        // Game objects
+        const gameMap = {
+            tiles: [],
+            width: 50,
+            height: 50
+        };
+
+        // Particle system
+        let particles = [];
+        
+        function createParticle(x, y, color, type = 'hit') {
+            const particle = {
+                x, y,
+                color,
+                life: 1,
+                type
+            };
+
+            switch(type) {
+                case 'hit':
+                    particle.velocity = {
+                        x: (Math.random() - 0.5) * 8,
+                        y: (Math.random() - 0.5) * 8
+                    };
+                    particle.size = Math.random() * 8 + 4;
+                    particle.decay = 0.05;
+                    break;
+                case 'xp':
+                    particle.velocity = {
+                        x: (Math.random() - 0.5) * 2,
+                        y: -Math.random() * 4 - 2
+                    };
+                    particle.size = 12;
+                    particle.text = '+XP';
+                    particle.decay = 0.02;
+                    break;
+                case 'damage':
+                    particle.velocity = {
+                        x: (Math.random() - 0.5) * 2,
+                        y: -Math.random() * 2 - 2
+                    };
+                    particle.size = 16;
+                    particle.text = particle.color;
+                    particle.decay = 0.03;
+                    break;
+                case 'warning':
+                    particle.velocity = {
+                        x: (Math.random() - 0.5) * 2,
+                        y: -Math.random() * 2 - 2
+                    };
+                    particle.size = 16;
+                    particle.text = particle.color;
+                    particle.decay = 0.03;
+                    break;
+            }
+
+            particles.push(particle);
+        }
+
+        function updateParticles() {
+            particles = particles.filter(particle => {
+                particle.x += particle.velocity.x;
+                particle.y += particle.velocity.y;
+                particle.life -= particle.decay;
+                
+                if (particle.type === 'hit') {
+                    particle.velocity.x *= 0.95;
+                    particle.velocity.y *= 0.95;
+                }
+                
+                return particle.life > 0;
+            });
+        }
+
+        function drawParticles() {
+            particles.forEach(particle => {
+                ctx.globalAlpha = particle.life;
+                if (particle.text) {
+                    ctx.font = `${particle.size}px Arial`;
+                    ctx.fillStyle = particle.color;
+                    ctx.fillText(
+                        particle.text,
+                        particle.x - camera.x,
+                        particle.y - camera.y
+                    );
+                } else {
+                    ctx.fillStyle = particle.color;
+                    ctx.beginPath();
+                    ctx.arc(
+                        particle.x - camera.x,
+                        particle.y - camera.y,
+                        particle.size,
+                        0,
+                        Math.PI * 2
+                    );
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+            });
+        }
+
+        // Screen shake effect
+        let screenShake = {
+            intensity: 0,
+            decay: 0.9,
+            offsetX: 0,
+            offsetY: 0
+        };
+
+        function updateScreenShake() {
+            if (screenShake.intensity > 0) {
+                screenShake.offsetX = (Math.random() - 0.5) * screenShake.intensity;
+                screenShake.offsetY = (Math.random() - 0.5) * screenShake.intensity;
+                screenShake.intensity *= screenShake.decay;
+                if (screenShake.intensity < 0.1) screenShake.intensity = 0;
+            } else {
+                screenShake.offsetX = 0;
+                screenShake.offsetY = 0;
+            }
+        }
+
+        // Generate a simple tile map
+        function generateMap(width, height) {
+            const map = [];
+            for (let y = 0; y < height; y++) {
+                map[y] = [];
+                for (let x = 0; x < width; x++) {
+                    // Create some random terrain
+                    const rand = Math.random();
+                    if (rand < 0.7) map[y][x] = TILES.GRASS;
+                    else if (rand < 0.8) map[y][x] = TILES.TREE;
+                    else if (rand < 0.9) map[y][x] = TILES.STONE;
+                    else map[y][x] = TILES.WATER;
+                }
+            }
+            // Ensure player spawn point is walkable
+            map[Math.floor(height/2)][Math.floor(width/2)] = TILES.GRASS;
+            return map;
+        }
+
+        gameMap.tiles = generateMap(50, 50);
+
+        const player = {
+            x: Math.floor(gameMap.width/2) * TILE_SIZE + (TILE_SIZE - PLAYER_SIZE)/2,
+            y: Math.floor(gameMap.height/2) * TILE_SIZE + (TILE_SIZE - PLAYER_SIZE)/2,
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            speed: 4,
+            color: '#ff0000',
+            level: 1,
+            xp: 0,
+            nextLevelXp: 100,
+            hp: 100,
+            maxHp: 100,
+            damage: 20,
+            attackRange: TILE_SIZE,
+            attackCooldown: 0,
+            isAttacking: false,
+            knockbackPower: 1,
+            criticalChance: 0,
+            criticalMultiplier: 2
+        };
+
+        const camera = {
+            x: 0,
+            y: 0,
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+
+        // Input handling
+        const keys = {};
+        window.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (e.key === ' ') { // Spacebar for attack
+                player.isAttacking = true;
+            }
+        });
+
+        window.addEventListener('keyup', e => {
+            keys[e.key] = false;
+            if (e.key === ' ') {
+                player.isAttacking = false;
+            }
+        });
+
+        function isPositionWalkable(x, y) {
+            const tileX = Math.floor(x / TILE_SIZE);
+            const tileY = Math.floor(y / TILE_SIZE);
+            
+            if (tileX < 0 || tileX >= gameMap.width || tileY < 0 || tileY >= gameMap.height) {
+                return false;
+            }
+            
+            return TILE_PROPERTIES[gameMap.tiles[tileY][tileX]].walkable;
+        }
+
+        function checkCollision(x, y, width, height) {
+            // Check all tiles that the player might intersect with
+            const startTileX = Math.floor(x / TILE_SIZE);
+            const startTileY = Math.floor(y / TILE_SIZE);
+            const endTileX = Math.ceil((x + width - 1) / TILE_SIZE);
+            const endTileY = Math.ceil((y + height - 1) / TILE_SIZE);
+
+            for (let tileY = startTileY; tileY < endTileY; tileY++) {
+                for (let tileX = startTileX; tileX < endTileX; tileX++) {
+                    if (!isPositionWalkable(tileX * TILE_SIZE, tileY * TILE_SIZE)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function updatePlayer() {
+            let newX = player.x;
+            let newY = player.y;
+            const diagonalSpeedAdjustment = 0.707; // approximately 1/√2
+
+            // Determine movement direction
+            const movingHorizontal = keys['ArrowLeft'] || keys['a'] || keys['ArrowRight'] || keys['d'];
+            const movingVertical = keys['ArrowUp'] || keys['w'] || keys['ArrowDown'] || keys['s'];
+            
+            // Adjust speed for diagonal movement
+            const currentSpeed = (movingHorizontal && movingVertical) ? 
+                player.speed * diagonalSpeedAdjustment : player.speed;
+
+            // Calculate new position
+            if (keys['ArrowLeft'] || keys['a']) newX -= currentSpeed;
+            if (keys['ArrowRight'] || keys['d']) newX += currentSpeed;
+            if (keys['ArrowUp'] || keys['w']) newY -= currentSpeed;
+            if (keys['ArrowDown'] || keys['s']) newY += currentSpeed;
+
+            // Try movement with collision detection
+            const canMoveToNewPos = checkCollision(newX, newY, player.width, player.height);
+
+            if (!canMoveToNewPos) {
+                // If we can't move to the new position, try moving in single axes
+                const canMoveX = checkCollision(newX, player.y, player.width, player.height);
+                const canMoveY = checkCollision(player.x, newY, player.width, player.height);
+
+                if (canMoveX) player.x = newX;
+                if (canMoveY) player.y = newY;
+            } else {
+                // We can move to the new position
+                player.x = newX;
+                player.y = newY;
+            }
+        }
+
+        function updateCamera() {
+            camera.x = player.x - canvas.width / 2 + player.width / 2;
+            camera.y = player.y - canvas.height / 2 + player.height / 2;
+        }
+
+        let enemies = [];
+        let loot = [];
+
+        function createEnemy(x, y, type) {
+            return {
+                x,
+                y,
+                width: type.size,
+                height: type.size,
+                speed: type.speed,
+                hp: type.hp,
+                maxHp: type.hp,
+                damage: type.damage,
+                color: type.color,
+                state: ENEMY_STATES.PATROL,
+                stunTime: 0,
+                hitFlash: 0,
+                type: type,
+                patrolPoint: { x, y },
+                patrolAngle: Math.random() * Math.PI * 2,
+                patrolTimer: 0,
+                detectionRange: type.detectionRange,
+                patrolSpeed: type.patrolSpeed,
+                attackPhase: 'ready',
+                attackTimer: 0,
+                cooldownTimer: 0
+            };
+        }
+
+        // Spawn initial enemies
+        for (let i = 0; i < 5; i++) {
+            const types = Object.values(ENEMY_TYPES);
+            const type = types[Math.floor(Math.random() * types.length)];
+            enemies.push(createEnemy(Math.random() * (gameMap.width * TILE_SIZE), Math.random() * (gameMap.height * TILE_SIZE), type));
+        }
+
+        function distance(obj1, obj2) {
+            const dx = obj1.x - obj2.x;
+            const dy = obj1.y - obj2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function hitEnemy(enemy, damage) {
+            // Check for critical hit
+            const isCritical = Math.random() < player.criticalChance;
+            const finalDamage = isCritical ? Math.floor(damage * player.criticalMultiplier) : damage;
+            
+            enemy.hp -= finalDamage;
+            enemy.hitFlash = 10;
+            screenShake.intensity = isCritical ? 12 : 8;
+
+            // Damage number with critical
+            createParticle(
+                enemy.x + enemy.width/2,
+                enemy.y,
+                isCritical ? `CRIT ${finalDamage}!` : `-${finalDamage}`,
+                'damage'
+            );
+
+            // Hit particles
+            const particleCount = Math.min(15, Math.floor(finalDamage / 5) + 5);
+            for (let i = 0; i < particleCount; i++) {
+                createParticle(
+                    enemy.x + enemy.width/2,
+                    enemy.y + enemy.height/2,
+                    isCritical ? '#FFD700' : enemy.color,
+                    'hit'
+                );
+            }
+
+            // Enhanced knockback
+            const angle = Math.atan2(enemy.y - player.y, enemy.x - player.x);
+            const knockback = Math.min(20, finalDamage / 2) * player.knockbackPower;
+            const newX = enemy.x + Math.cos(angle) * knockback;
+            const newY = enemy.y + Math.sin(angle) * knockback;
+            
+            if (checkCollision(newX, enemy.y, enemy.width, enemy.height)) {
+                enemy.x = newX;
+            }
+            if (checkCollision(enemy.x, newY, enemy.width, enemy.height)) {
+                enemy.y = newY;
+            }
+
+            enemy.stunTime = Math.min(30, 10 + finalDamage / 2);
+            enemy.state = ENEMY_STATES.STUNNED;
+
+            if (enemy.hp <= 0) {
+                killEnemy(enemy);
+            }
+        }
+
+        function killEnemy(enemy) {
+            // Death particles
+            const deathParticles = Math.min(25, 15 + enemy.type.xpValue / 4);
+            for (let i = 0; i < deathParticles; i++) {
+                createParticle(
+                    enemy.x + enemy.width/2,
+                    enemy.y + enemy.height/2,
+                    enemy.color,
+                    'hit'
+                );
+            }
+
+            // XP gain particle
+            createParticle(
+                enemy.x + enemy.width/2,
+                enemy.y,
+                `+${enemy.type.xpValue} XP`,
+                'xp'
+            );
+
+            // Add XP
+            player.xp += enemy.type.xpValue;
+            checkLevelUp();
+
+            // Spawn loot
+            const lootChances = {
+                gold: 0.7,
+                health: enemy.type.hp > 50 ? 0.4 : 0.2,
+                weapon: enemy.type.damage > 15 ? 0.3 : 0.1
+            };
+
+            // Can drop multiple items
+            if (Math.random() < lootChances.gold) {
+                spawnLoot(enemy, LOOT_TYPES.GOLD);
+            }
+            if (Math.random() < lootChances.health) {
+                spawnLoot(enemy, LOOT_TYPES.HEALTH);
+            }
+            if (Math.random() < lootChances.weapon) {
+                spawnLoot(enemy, LOOT_TYPES.WEAPON);
+            }
+
+            // Extra screen shake on death
+            screenShake.intensity = 10 + enemy.type.xpValue / 4;
+        }
+
+        function spawnLoot(enemy, lootType) {
+            // Spread loot around enemy position
+            const spread = enemy.width / 2;
+            loot.push({
+                x: enemy.x + enemy.width/2 + (Math.random() - 0.5) * spread,
+                y: enemy.y + enemy.height/2 + (Math.random() - 0.5) * spread,
+                width: LOOT_SIZE,
+                height: LOOT_SIZE,
+                type: lootType
+            });
+        }
+
+        function updateEnemies() {
+            enemies.forEach(enemy => {
+                if (enemy.hitFlash > 0) enemy.hitFlash--;
+                
+                if (enemy.stunTime > 0) {
+                    enemy.stunTime--;
+                    enemy.state = ENEMY_STATES.STUNNED;
+                    return;
+                }
+
+                const dist = distance(enemy, player);
+
+                switch (enemy.state) {
+                    case ENEMY_STATES.PATROL:
+                        // Update patrol movement
+                        enemy.patrolTimer++;
+                        
+                        // Change direction every 3 seconds or when too far from patrol point
+                        if (enemy.patrolTimer > 180 || Math.hypot(enemy.patrolPoint.x - enemy.x, enemy.patrolPoint.y - enemy.y) > TILE_SIZE * 3) {
+                            enemy.patrolAngle = Math.random() * Math.PI * 2;
+                            enemy.patrolTimer = 0;
+                        }
+
+                        // Move in patrol direction
+                        const newX = enemy.x + Math.cos(enemy.patrolAngle) * enemy.patrolSpeed;
+                        const newY = enemy.y + Math.sin(enemy.patrolAngle) * enemy.patrolSpeed;
+
+                        // Check collisions and update position
+                        if (checkCollision(newX, enemy.y, enemy.width, enemy.height)) {
+                            enemy.x = newX;
+                        } else {
+                            enemy.patrolAngle = Math.random() * Math.PI * 2;
+                        }
+
+                        if (checkCollision(enemy.x, newY, enemy.width, enemy.height)) {
+                            enemy.y = newY;
+                        } else {
+                            enemy.patrolAngle = Math.random() * Math.PI * 2;
+                        }
+
+                        // Switch to chase if player is detected
+                        if (dist < enemy.detectionRange) {
+                            enemy.state = ENEMY_STATES.CHASE;
+                        }
+                        break;
+
+                    case ENEMY_STATES.CHASE:
+                        // Calculate angle to player
+                        const chaseAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                        
+                        // Move towards player
+                        const chaseX = enemy.x + Math.cos(chaseAngle) * enemy.speed;
+                        const chaseY = enemy.y + Math.sin(chaseAngle) * enemy.speed;
+
+                        // Update position with collision check
+                        if (checkCollision(chaseX, enemy.y, enemy.width, enemy.height)) {
+                            enemy.x = chaseX;
+                        }
+                        if (checkCollision(enemy.x, chaseY, enemy.width, enemy.height)) {
+                            enemy.y = chaseY;
+                        }
+
+                        // Only switch to attack if close enough AND cooldown is done AND in ready phase
+                        if (dist < TILE_SIZE && enemy.cooldownTimer <= 0 && enemy.attackPhase === 'ready') {
+                            enemy.state = ENEMY_STATES.ATTACK;
+                            enemy.attackPhase = 'windup';
+                            enemy.attackTimer = enemy.type.attackWindup;
+                            
+                            // Warning particle
+                            createParticle(
+                                enemy.x + enemy.width/2,
+                                enemy.y - 10,
+                                '!',
+                                'warning'
+                            );
+                        }
+                        // Return to patrol if player is too far
+                        else if (dist > enemy.detectionRange * 1.5) {
+                            enemy.state = ENEMY_STATES.PATROL;
+                            enemy.patrolTimer = 0;
+                        }
+                        break;
+
+                    case ENEMY_STATES.ATTACK:
+                        // Cancel attack if player gets too far
+                        if (dist > TILE_SIZE * 1.5) {
+                            enemy.state = ENEMY_STATES.CHASE;
+                            enemy.attackPhase = 'ready';
+                            enemy.cooldownTimer = Math.floor(enemy.type.attackCooldown * 0.5); // Partial cooldown for cancelled attack
+                            return;
+                        }
+
+                        enemy.attackTimer--;
+                        
+                        switch (enemy.attackPhase) {
+                            case 'windup':
+                                if (enemy.attackTimer <= 0) {
+                                    enemy.attackPhase = 'attack';
+                                    
+                                    // Only deal damage if still in range
+                                    if (dist < TILE_SIZE) {
+                                        // Deal damage to player
+                                        player.hp -= enemy.damage;
+                                        screenShake.intensity = 5;
+
+                                        // Knockback and particles
+                                        const knockbackAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                                        const knockbackDist = 10;
+                                        const knockbackX = player.x + Math.cos(knockbackAngle) * knockbackDist;
+                                        const knockbackY = player.y + Math.sin(knockbackAngle) * knockbackDist;
+
+                                        if (checkCollision(knockbackX, player.y, player.width, player.height)) {
+                                            player.x = knockbackX;
+                                        }
+                                        if (checkCollision(player.x, knockbackY, player.width, player.height)) {
+                                            player.y = knockbackY;
+                                        }
+
+                                        createParticle(
+                                            player.x + player.width/2,
+                                            player.y,
+                                            `-${enemy.damage}`,
+                                            'damage'
+                                        );
+
+                                        for (let i = 0; i < 5; i++) {
+                                            createParticle(
+                                                player.x + player.width/2,
+                                                player.y + player.height/2,
+                                                '#ff0000',
+                                                'hit'
+                                            );
+                                        }
+                                    }
+                                    
+                                    enemy.attackPhase = 'endlag';
+                                    enemy.attackTimer = enemy.type.attackEndlag;
+                                }
+                                break;
+
+                            case 'endlag':
+                                if (enemy.attackTimer <= 0) {
+                                    enemy.state = ENEMY_STATES.CHASE;
+                                    enemy.attackPhase = 'ready';
+                                    enemy.cooldownTimer = enemy.type.attackCooldown;
+                                }
+                                break;
+                        }
+                        break;
+                }
+
+                // Update cooldown timer
+                if (enemy.cooldownTimer > 0) {
+                    enemy.cooldownTimer--;
+                }
+
+                // Update hit flash effect
+                if (enemy.hitFlash > 0) {
+                    enemy.hitFlash--;
+                }
+            });
+
+            // Remove dead enemies and spawn new ones
+            enemies = enemies.filter(enemy => enemy.hp > 0);
+
+            // Spawn new enemies if needed
+            while (enemies.length < 5) {
+                const types = Object.values(ENEMY_TYPES);
+                const type = types[Math.floor(Math.random() * types.length)];
+                enemies.push(createEnemy(Math.random() * (gameMap.width * TILE_SIZE), Math.random() * (gameMap.height * TILE_SIZE), type));
+            }
+        }
+
+        function handleCombat() {
+            if (player.isAttacking && player.attackCooldown <= 0) {
+                // Screen shake on attack
+                screenShake.intensity = 5;
+                
+                // Attack effect
+                const attackAngle = Math.random() * Math.PI * 2;
+                for (let i = 0; i < 8; i++) {
+                    createParticle(
+                        player.x + player.width/2 + Math.cos(attackAngle + i * Math.PI/4) * player.attackRange/2,
+                        player.y + player.height/2 + Math.sin(attackAngle + i * Math.PI/4) * player.attackRange/2,
+                        'white',
+                        'hit'
+                    );
+                }
+
+                // Check for enemies in range
+                enemies.forEach(enemy => {
+                    if (distance(player, enemy) < player.attackRange) {
+                        hitEnemy(enemy, player.damage);
+                    }
+                });
+                player.attackCooldown = 30;
+            }
+            if (player.attackCooldown > 0) player.attackCooldown--;
+        }
+
+        function updateLoot() {
+            loot = loot.filter(item => {
+                if (distance(item, player) < PLAYER_SIZE) {
+                    // Collect loot
+                    if (item.type === LOOT_TYPES.GOLD) {
+                        player.xp += item.type.xp;
+                        checkLevelUp();
+                    } else if (item.type === LOOT_TYPES.HEALTH) {
+                        player.hp = Math.min(player.maxHp, player.hp + item.type.healing);
+                    } else if (item.type === LOOT_TYPES.WEAPON) {
+                        player.damage += item.type.damage;
+                    }
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        function checkLevelUp() {
+            if (player.xp >= player.nextLevelXp) {
+                player.level++;
+                player.xp -= player.nextLevelXp;
+                player.nextLevelXp = Math.floor(player.nextLevelXp * 1.5);
+                showLevelUpMenu();
+            }
+        }
+
+        function drawTiles() {
+            const startTileX = Math.floor(camera.x / TILE_SIZE);
+            const startTileY = Math.floor(camera.y / TILE_SIZE);
+            const endTileX = Math.ceil((camera.x + canvas.width) / TILE_SIZE);
+            const endTileY = Math.ceil((camera.y + canvas.height) / TILE_SIZE);
+
+            for (let y = startTileY; y < endTileY; y++) {
+                for (let x = startTileX; x < endTileX; x++) {
+                    if (x >= 0 && x < gameMap.width && y >= 0 && y < gameMap.height) {
+                        const tile = gameMap.tiles[y][x];
+                        ctx.fillStyle = TILE_PROPERTIES[tile].color;
+                        ctx.fillRect(
+                            x * TILE_SIZE - camera.x,
+                            y * TILE_SIZE - camera.y,
+                            TILE_SIZE,
+                            TILE_SIZE
+                        );
+                        
+                        // Draw tile grid
+                        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                        ctx.strokeRect(
+                            x * TILE_SIZE - camera.x,
+                            y * TILE_SIZE - camera.y,
+                            TILE_SIZE,
+                            TILE_SIZE
+                        );
+                    }
+                }
+            }
+        }
+
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                // Flash white when hit
+                ctx.fillStyle = enemy.hitFlash > 0 ? '#FFFFFF' : 
+                               enemy.state === ENEMY_STATES.STUNNED ? '#A020F0' : 
+                               enemy.color;
+                               
+                ctx.fillRect(
+                    enemy.x - camera.x + screenShake.offsetX,
+                    enemy.y - camera.y + screenShake.offsetY,
+                    enemy.width,
+                    enemy.height
+                );
+
+                // Draw HP bar
+                const hpBarWidth = enemy.width;
+                const hpBarHeight = 5;
+                
+                // HP bar background
+                ctx.fillStyle = '#500000';
+                ctx.fillRect(
+                    enemy.x - camera.x + screenShake.offsetX,
+                    enemy.y - camera.y + screenShake.offsetY - 10,
+                    hpBarWidth,
+                    hpBarHeight
+                );
+                
+                // HP bar fill
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(
+                    enemy.x - camera.x + screenShake.offsetX,
+                    enemy.y - camera.y + screenShake.offsetY - 10,
+                    hpBarWidth * (enemy.hp / enemy.maxHp),
+                    hpBarHeight
+                );
+
+                // Enemy name
+                ctx.fillStyle = 'white';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(
+                    enemy.type.name,
+                    enemy.x - camera.x + enemy.width/2 + screenShake.offsetX,
+                    enemy.y - camera.y - 15 + screenShake.offsetY
+                );
+                ctx.textAlign = 'left';
+
+                // State indicator
+                const stateColors = {
+                    [ENEMY_STATES.PATROL]: '#ffff00',  // Yellow
+                    [ENEMY_STATES.CHASE]: '#ff0000',   // Red
+                    [ENEMY_STATES.ATTACK]: enemy.attackPhase === 'windup' ? '#ffaa00' : 
+                                         enemy.attackPhase === 'attack' ? '#ff00ff' :
+                                         enemy.attackPhase === 'endlag' ? '#aa00ff' : '#ff0000',
+                    [ENEMY_STATES.STUNNED]: '#ffffff'  // White
+                };
+                
+                ctx.fillStyle = stateColors[enemy.state];
+                ctx.fillRect(
+                    enemy.x - camera.x + enemy.width/2 - 2 + screenShake.offsetX,
+                    enemy.y - camera.y - 12 + screenShake.offsetY,
+                    4,
+                    4
+                );
+            });
+        }
+
+        function drawLoot() {
+            loot.forEach(item => {
+                ctx.fillStyle = item.type.color;
+                ctx.beginPath();
+                ctx.arc(
+                    item.x - camera.x + LOOT_SIZE/2,
+                    item.y - camera.y + LOOT_SIZE/2,
+                    LOOT_SIZE/2,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            });
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(
+                player.x - camera.x,
+                player.y - camera.y,
+                player.width,
+                player.height
+            );
+
+            // Draw attack animation if attacking
+            if (player.isAttacking && player.attackCooldown > 15) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.beginPath();
+                ctx.arc(
+                    player.x - camera.x + player.width/2,
+                    player.y - camera.y + player.height/2,
+                    player.attackRange,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('level').textContent = player.level;
+            document.getElementById('xp').textContent = Math.floor(player.xp);
+            document.getElementById('next-level').textContent = player.nextLevelXp;
+            document.getElementById('hp').textContent = Math.floor(player.hp);
+            document.getElementById('max-hp').textContent = player.maxHp;
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            camera.width = canvas.width;
+            camera.height = canvas.height;
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game state
+        let gameState = {
+            running: true,
+            levelingUp: false
+        };
+
+        // Skill upgrades
+        const SKILL_UPGRADES = {
+            WARRIOR: [
+                {
+                    title: "Mighty Swing",
+                    description: "Increase attack damage by 50%",
+                    effect: (player) => {
+                        player.damage = Math.floor(player.damage * 1.5);
+                        createParticle(player.x + player.width/2, player.y, `Damage +50%!`, 'xp');
+                    }
+                },
+                {
+                    title: "Battle Hardened",
+                    description: "Increase max HP by 50",
+                    effect: (player) => {
+                        player.maxHp += 50;
+                        player.hp += 50;
+                        createParticle(player.x + player.width/2, player.y, `HP +50!`, 'xp');
+                    }
+                },
+                {
+                    title: "Critical Strike",
+                    description: "20% chance to deal double damage",
+                    effect: (player) => {
+                        player.criticalChance += 0.2;
+                        createParticle(player.x + player.width/2, player.y, `Crit Chance +20%!`, 'xp');
+                    }
+                }
+            ],
+            RANGER: [
+                {
+                    title: "Extended Reach",
+                    description: "Increase attack range by 50%",
+                    effect: (player) => {
+                        player.attackRange *= 1.5;
+                        createParticle(player.x + player.width/2, player.y, `Range +50%!`, 'xp');
+                    }
+                },
+                {
+                    title: "Swift Feet",
+                    description: "Increase movement speed by 25%",
+                    effect: (player) => {
+                        player.speed *= 1.25;
+                        createParticle(player.x + player.width/2, player.y, `Speed +25%!`, 'xp');
+                    }
+                }
+            ],
+            TANK: [
+                {
+                    title: "Iron Skin",
+                    description: "Double your max HP",
+                    effect: (player) => {
+                        player.maxHp *= 2;
+                        player.hp *= 2;
+                        createParticle(player.x + player.width/2, player.y, `HP Doubled!`, 'xp');
+                    }
+                },
+                {
+                    title: "Knockback Master",
+                    description: "Double knockback power",
+                    effect: (player) => {
+                        player.knockbackPower *= 2;
+                        createParticle(player.x + player.width/2, player.y, `Knockback +100%!`, 'xp');
+                    }
+                }
+            ]
+        };
+
+        function showLevelUpMenu() {
+            gameState.levelingUp = true;
+            gameState.running = false;
+            
+            const menu = document.getElementById('level-up-menu');
+            const choices = document.getElementById('skill-choices');
+            choices.innerHTML = '';
+
+            // Get random upgrades from different categories
+            const availableUpgrades = [];
+            for (const category of Object.values(SKILL_UPGRADES)) {
+                const randomUpgrade = category[Math.floor(Math.random() * category.length)];
+                availableUpgrades.push(randomUpgrade);
+            }
+
+            // Shuffle and take 3
+            const selectedUpgrades = availableUpgrades
+                .sort(() => Math.random() - 0.5)
+                .slice(0, 3);
+
+            selectedUpgrades.forEach(upgrade => {
+                const choice = document.createElement('div');
+                choice.className = 'skill-choice';
+                choice.innerHTML = `
+                    <div class="skill-title">${upgrade.title}</div>
+                    <div class="skill-description">${upgrade.description}</div>
+                `;
+                choice.onclick = () => {
+                    upgrade.effect(player);
+                    menu.style.display = 'none';
+                    gameState.levelingUp = false;
+                    gameState.running = true;
+
+                    // Celebration particles
+                    for (let i = 0; i < 20; i++) {
+                        createParticle(
+                            player.x + player.width/2,
+                            player.y + player.height/2,
+                            '#FFD700',
+                            'hit'
+                        );
+                    }
+                };
+                choices.appendChild(choice);
+            });
+
+            menu.style.display = 'block';
+        }
+
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+            
+            if (!gameState.running) return;
+
+            updatePlayer();
+            updateEnemies();
+            updateLoot();
+            updateParticles();
+            updateScreenShake();
+            handleCombat();
+            updateCamera();
+            updateUI();
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.save();
+            ctx.translate(screenShake.offsetX, screenShake.offsetY);
+            
+            drawTiles();
+            drawLoot();
+            drawEnemies();
+            drawPlayer();
+            drawParticles();
+            
+            ctx.restore();
+
+            // Draw instructions
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px Arial';
+            ctx.fillText('WASD/Arrows to move, SPACE to attack', 10, 60);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
