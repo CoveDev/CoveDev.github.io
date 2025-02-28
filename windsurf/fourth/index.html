@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Canvas</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+        }
+        canvas {
+            image-rendering: -moz-crisp-edges;    /* Firefox */
+            image-rendering: -webkit-crisp-edges; /* Webkit */
+            image-rendering: pixelated;           /* Chrome */
+            image-rendering: crisp-edges;         /* General */
+            -ms-interpolation-mode: nearest-neighbor; /* IE */
+            -webkit-font-smoothing: none;
+            -moz-osx-font-smoothing: none;
+            display: block;
+            /* Ensure canvas size is always an integer multiple of base sprite size */
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script src="game.js"></script>
+</body>
+</html>
