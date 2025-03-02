@@ -77,7 +77,7 @@ class Sprite {
                 loops: true
             });
         }
-
+        
         // Add combo attack animations
         const comboAttackDirections = [
             ['down_right', 0, 300],
@@ -99,12 +99,40 @@ class Sprite {
                 frameHeight: 50,
                 frameCount: 10,
                 frameDuration: 100,
-                loops: false
+                loops: false,
+                endLag: 50
             });
         }
+
+        // Add test animation for T key
+        const testAnimation2 = [
+            ['down_right', 0, 250],
+            ['down', 0, 600],
+            ['down_left', 0, 950],
+            ['left', 0, 1300],
+            ['top_left', 0, 1650],
+            ['top', 0, 2000],
+            ['top_right', 0, 2350],
+            ['right', 0, 2700]
+        ];
+
+        for (const [direction, startX, startY] of testAnimation2) {
+            this.addAnimation('test_attack_' + direction, {
+                spritesheet: 'spritesheet1.png',
+                startX,
+                startY,
+                frameWidth: 50,
+                frameHeight: 50,
+                frameCount: 10,
+                frameDuration: 100,
+                loops: false,
+                endLag: 50
+            });
+        }
+
     }
 
-    addAnimation(name, { spritesheet, startX, startY, frameWidth, frameHeight, frameCount, frameDuration, loops }) {
+    addAnimation(name, { spritesheet, startX, startY, frameWidth, frameHeight, frameCount, frameDuration, loops, endLag = 0 }) {
         const frames = [];
         for (let i = 0; i < frameCount; i++) {
             frames.push({
@@ -114,7 +142,14 @@ class Sprite {
                 height: frameHeight
             });
         }
-        this.animations.set(name, { spritesheet, frames, frameDuration, loops });
+        
+        this.animations.set(name, {
+            spritesheet,
+            frames,
+            frameDuration,
+            loops,
+            endLag
+        });
     }
 
     playAnimation(name) {
@@ -147,11 +182,20 @@ class Sprite {
                 const dashPhase = (this.currentFrame - 1 + frameProgress) / 3;
                 const dashSpeed = baseDashSpeed * Math.sin(dashPhase * Math.PI / 2);
                 
-                // Forward movement only
-                if (direction.includes('right')) this.x += dashSpeed * (deltaTime / 16);
-                if (direction.includes('left')) this.x -= dashSpeed * (deltaTime / 16);
-                if (direction.includes('top')) this.y -= dashSpeed * (deltaTime / 16);
-                if (direction.includes('down')) this.y += dashSpeed * (deltaTime / 16);
+                // Forward movement only, normalize speed for all directions
+                if (direction.includes('_')) {
+                    // Diagonal movement - apply to both directions
+                    if (direction.includes('right')) this.x += dashSpeed * 0.707 * (deltaTime / 16);
+                    if (direction.includes('left')) this.x -= dashSpeed * 0.707 * (deltaTime / 16);
+                    if (direction.includes('top')) this.y -= dashSpeed * 0.707 * (deltaTime / 16);
+                    if (direction.includes('down')) this.y += dashSpeed * 0.707 * (deltaTime / 16);
+                } else {
+                    // Single direction - full speed
+                    if (direction.includes('right')) this.x += dashSpeed * (deltaTime / 16);
+                    if (direction.includes('left')) this.x -= dashSpeed * (deltaTime / 16);
+                    if (direction.includes('top')) this.y -= dashSpeed * (deltaTime / 16);
+                    if (direction.includes('down')) this.y += dashSpeed * (deltaTime / 16);
+                }
             }
             // Second dash (frames 7-8) if combo triggered
             else if (this.comboTriggered && this.currentFrame >= 6 && this.currentFrame <= 7) {
@@ -159,19 +203,34 @@ class Sprite {
                 const dashPhase = (this.currentFrame - 6 + frameProgress) / 2;
                 const dashSpeed = baseDashSpeed * 2 * Math.sin(dashPhase * Math.PI / 2);
                 
-                // Forward movement only
-                if (direction.includes('right')) this.x += dashSpeed * (deltaTime / 16);
-                if (direction.includes('left')) this.x -= dashSpeed * (deltaTime / 16);
-                if (direction.includes('top')) this.y -= dashSpeed * (deltaTime / 16);
-                if (direction.includes('down')) this.y += dashSpeed * (deltaTime / 16);
+                // Forward movement only, normalize speed for all directions
+                if (direction.includes('_')) {
+                    // Diagonal movement - apply to both directions
+                    if (direction.includes('right')) this.x += dashSpeed * 0.707 * (deltaTime / 16);
+                    if (direction.includes('left')) this.x -= dashSpeed * 0.707 * (deltaTime / 16);
+                    if (direction.includes('top')) this.y -= dashSpeed * 0.707 * (deltaTime / 16);
+                    if (direction.includes('down')) this.y += dashSpeed * 0.707 * (deltaTime / 16);
+                } else {
+                    // Single direction - full speed
+                    if (direction.includes('right')) this.x += dashSpeed * (deltaTime / 16);
+                    if (direction.includes('left')) this.x -= dashSpeed * (deltaTime / 16);
+                    if (direction.includes('top')) this.y -= dashSpeed * (deltaTime / 16);
+                    if (direction.includes('down')) this.y += dashSpeed * (deltaTime / 16);
+                }
             }
         }
 
+        // Get current frame duration, including endLag if it's the final frame
+        let currentFrameDuration = animation.frameDuration;
+        if (this.currentFrame === animation.frames.length - 1 && animation.endLag) {
+            currentFrameDuration += animation.endLag;
+        }
+
         this.frameTimer += deltaTime;
-        if (this.frameTimer >= animation.frameDuration) {
+        if (this.frameTimer >= currentFrameDuration) {
             this.frameTimer = 0;
             
-            if (this.currentAnimation.startsWith('combo_attack_')) {
+            if (this.currentAnimation.startsWith('combo_attack_') || this.currentAnimation.startsWith('test_attack_')) {
                 // First 6 frames - check for second attack
                 if (this.currentFrame < 6) {
                     this.currentFrame++;
@@ -179,7 +238,7 @@ class Sprite {
                 // At frame 6, decide whether to continue
                 else if (this.currentFrame === 6) {
                     this.currentFrame++;
-                    if (!this.comboTriggered) {
+                    if (!this.comboTriggered && this.currentAnimation.startsWith('combo_attack_')) {
                         this.isActable = true;
                         const direction = this.currentAnimation.replace('combo_attack_', '');
                         this.playAnimation('idle_' + direction);
@@ -193,7 +252,10 @@ class Sprite {
                 else {
                     this.isActable = true;
                     this.comboTriggered = false;
-                    const direction = this.currentAnimation.replace('combo_attack_', '');
+                    const direction = this.currentAnimation.replace(
+                        this.currentAnimation.startsWith('test_attack_') ? 'test_attack_' : 'combo_attack_', 
+                        ''
+                    );
                     this.playAnimation('idle_' + direction);
                 }
             } else {
@@ -315,6 +377,8 @@ class Game {
     }
 
     handleInput() {
+        if (!this.player) return;
+
         // Attack input during first 6 frames sets combo flag
         if (this.player.currentAnimation?.startsWith('combo_attack_') && 
             this.player.currentFrame <= 5 && 
@@ -326,6 +390,18 @@ class Game {
         }
 
         if (!this.player.isActable) return;
+
+        // Test animation with T key
+        if (this.keys.has('t')) {
+            this.player.isActable = false;
+            // Get current direction from animation name
+            let direction = 'right';
+            if (this.player.currentAnimation) {
+                direction = this.player.currentAnimation.split('_').slice(1).join('_');
+            }
+            this.player.playAnimation('test_attack_' + direction);
+            return;
+        }
 
         // Start new attack
         if (this.keys.has(' ') && this.spaceWasReleased) {
