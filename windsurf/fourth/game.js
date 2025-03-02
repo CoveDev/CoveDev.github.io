@@ -12,6 +12,40 @@ class Sprite {
         this.x = 0;
         this.y = 0;
         this.scale = 3; // Default zoom level
+        
+        // Sound setup
+        this.slash1Sound = new Audio('slash1.mp3');
+        this.slash2Sound = new Audio('slash2.mp3');
+        this.slash1Sound.volume = 0.5;
+        this.slash2Sound.volume = 0.5;
+        this.lastSlash1Time = 0;
+        this.lastSlash2Time = 0;
+    }
+
+    // Helper to play sound with variation
+    playSlashSound(isSecondHit = false) {
+        const now = performance.now();
+        const lastTime = isSecondHit ? this.lastSlash2Time : this.lastSlash1Time;
+        
+        // Don't play if less than 50ms since last play of this sound
+        if (now - lastTime < 50) return;
+        
+        const sound = (isSecondHit ? this.slash2Sound : this.slash1Sound).cloneNode();
+        
+        // Random pitch variation (0.7 to 1.3)
+        sound.playbackRate = 0.7 + Math.random() * 0.6;
+        
+        // Random volume variation (0.45 to 0.55)
+        sound.volume = 0.45 + Math.random() * 0.1;
+        
+        sound.play();
+        
+        // Update last play time
+        if (isSecondHit) {
+            this.lastSlash2Time = now;
+        } else {
+            this.lastSlash1Time = now;
+        }
     }
 
     async loadSpritesheets() {
@@ -153,13 +187,13 @@ class Sprite {
     }
 
     playAnimation(name) {
-        if (this.currentAnimation !== name) {
-            this.currentAnimation = name;
-            this.currentFrame = 0;
-            this.frameTimer = 0;
-            this.isActable = !name.includes('attack_');
-            this.comboTriggered = false;
-        }
+        if (this.currentAnimation === name) return;
+        
+        this.currentAnimation = name;
+        this.currentFrame = 0;
+        this.frameTimer = 0;
+        this.isActable = !name.includes('attack_');
+        this.comboTriggered = false;
     }
 
     update(deltaTime) {
@@ -175,6 +209,11 @@ class Sprite {
             
             // Calculate frame progress for smoother transitions
             const frameProgress = this.frameTimer / animation.frameDuration;
+            
+            // Play first slash sound at start of first dash
+            if (this.currentFrame === 1 && this.frameTimer === 0) {
+                this.playSlashSound(false);
+            }
             
             // First dash (frames 2-4)
             if (this.currentFrame >= 1 && this.currentFrame <= 3) {
@@ -199,6 +238,11 @@ class Sprite {
             }
             // Second dash (frames 7-8) if combo triggered
             else if (this.comboTriggered && this.currentFrame >= 6 && this.currentFrame <= 7) {
+                // Play second slash sound
+                if (this.currentFrame === 6 && this.frameTimer === 0) {
+                    this.playSlashSound(true);
+                }
+                
                 // Use only first half of sine wave for pure forward motion
                 const dashPhase = (this.currentFrame - 6 + frameProgress) / 2;
                 const dashSpeed = baseDashSpeed * 2 * Math.sin(dashPhase * Math.PI / 2);
