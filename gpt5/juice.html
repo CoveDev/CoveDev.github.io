@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HTML5 Juicy Game — Partikel + Gegner + Loot</title>
+<style>
+  html, body { height:100%; margin:0; background:#0b0e14; color:#dde1f0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+  body { overflow:hidden; }
+  #wrap { position: relative; width: 100%; height: 100%; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; background:#0b0e14; image-rendering: pixelated; }
+  .hud { position:absolute; inset:0; pointer-events:none; }
+  .hud .corner { position:absolute; top:16px; left:16px; font-weight:600; letter-spacing:.3px; opacity:.92; }
+  .hud .bar { width:240px; height:10px; background:#171b26; border-radius:999px; overflow:hidden; margin-top:8px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+  .hud .fill { height:100%; width:100%; background: linear-gradient(90deg,#7dd3fc,#38bdf8,#2563eb); filter:saturate(1.4) brightness(1.1); transform-origin:left; }
+  .combo { position:absolute; top:16px; right:16px; font-size:28px; font-weight:800; text-shadow:0 2px 12px rgba(56,189,248,.45); opacity:0; transform:scale(.9); transition: transform .12s ease-out; }
+  .score { position:absolute; top:56px; right:16px; font-weight:700; opacity:.9; }
+  .centerFlash { position:absolute; inset:0; background: radial-gradient(60% 60% at 50% 50%, rgba(255,255,255,.14), rgba(255,255,255,0) 70%); opacity:0; mix-blend-mode: screen; }
+  .vignette { position:absolute; inset:0; pointer-events:none; background: radial-gradient(100% 100% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.25) 85%); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div class="hud">
+    <div class="corner">
+      <div>WASD bewegen • Shift Dash • LMB/Space: Leicht • RMB: Schwer • E: Fernkampf</div>
+      <div class="bar"><div class="fill" id="staminaFill"></div></div>
+    </div>
+    <div class="combo" id="combo">x0</div>
+    <div class="score" id="score">Score: 0 • Gems: 0</div>
+    <div class="centerFlash" id="centerFlash"></div>
+    <div class="vignette"></div>
+  </div>
+</div>
+<script>
+// ===== Utils =====
+const rand=(a,b)=>Math.random()*(b-a)+a;const irand=(a,b)=>Math.floor(rand(a,b));
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+const lerp=(a,b,t)=>a+(b-a)*t; const TAU=Math.PI*2;
+
+// ===== Setup =====
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+let dpr=window.devicePixelRatio||1;
+function resize(){
+  const w=window.innerWidth, h=window.innerHeight;
+  canvas.style.width=w+'px'; canvas.style.height=h+'px';
+  dpr=window.devicePixelRatio||1; canvas.width=Math.floor(w*dpr); canvas.height=Math.floor(h*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',resize); resize();
+canvas.addEventListener('contextmenu', e=> e.preventDefault());
+
+// Camera
+const cam={x:0,y:0,shake:0,shakeX:0,shakeY:0};
+
+// Input
+const keys=new Set(); let mouse={x:0,y:0,down:false,rdown:false};
+window.addEventListener('keydown',e=>{keys.add(e.key.toLowerCase()); if([" ","space","arrowup","arrowdown","arrowleft","arrowright"].includes(e.key.toLowerCase())) e.preventDefault();});
+window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+canvas.addEventListener('pointerdown',e=>{ if(e.button===0) mouse.down=true; if(e.button===2) mouse.rdown=true;});
+window.addEventListener('pointerup',e=>{ if(e.button===0) mouse.down=false; if(e.button===2) mouse.rdown=false;});
+window.addEventListener('pointermove',e=>{ const r=canvas.getBoundingClientRect(); mouse.x=e.clientX-r.left; mouse.y=e.clientY-r.top;});
+
+// Audio (procedural)
+const AC=window.AudioContext||window.webkitAudioContext; const audio=new AC();
+const sfx={ blip(p=440,d=.07,t='square',v=.2){const o=audio.createOscillator();const g=audio.createGain();o.type=t;o.frequency.setValueAtTime(p,audio.currentTime);g.gain.setValueAtTime(v,audio.currentTime);g.gain.exponentialRampToValueAtTime(0.0001,audio.currentTime+d);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+d);}, hit(){this.blip(200,.08,'square',.28);this.blip(1200,.04,'sawtooth',.12);}, heavy(){this.blip(180,.12,'square',.32);this.blip(90,.1,'triangle',.22);}, dash(){this.blip(300,.06,'triangle',.2);}, spawn(){this.blip(660,.12,'sawtooth',.15);}, shoot(){this.blip(900,.06,'square',.18);}, pickup(){this.blip(1200,.08,'triangle',.18);} };
+window.addEventListener('pointerdown',()=>{ if(audio.state!=="running") audio.resume(); },{once:true});
+
+// World
+const world={w:2200,h:1500};
+
+// Player
+const player={ x:world.w/2,y:world.h/2,r:16,vx:0,vy:0,speed:270,color:'#8dd5ff',dir:0,
+  dashCd:0,dashTime:0,dashDur:0.12,dashSpeed:680, stamina:1, trail:[],
+  attackCd:0,swinging:false,swingT:0,swingDir:1,swingDmg:1,
+  heavyCd:0,heavying:false,heavyT:0,heavyWind:0.15, shootCd:0 };
+
+// Projectiles
+const bolts=[]; // player
+const bullets=[]; // enemies
+
+// Enemies
+const enemies=[]; const types=['grunt','charger','shooter','tank'];
+function spawnEnemy(){
+  const type=types[irand(0,types.length)];
+  const e={ type, x:rand(80,world.w-80), y:rand(80,world.h-80), r:18, vx:0, vy:0,
+    speed: type==='tank'?80: type==='charger'?150: type==='shooter'?110:120,
+    hp:    type==='tank'?6:  type==='charger'?3:   type==='shooter'?2:   3,
+    iFrames:0, hue: type==='tank'?20: type==='charger'?320: type==='shooter'?220:160,
+    flicker:0, ai:{t:0,cooldown:0} };
+  enemies.push(e); sfx.spawn();
+}
+for(let i=0;i<10;i++) spawnEnemy();
+
+// Loot (gems)
+const gems=[]; let score=0, gemCount=0;
+function dropGems(x,y,n=irand(2,5)){
+  for(let i=0;i<n;i++) gems.push({x,y,vx:Math.cos(rand(0,TAU))*rand(60,200),vy:Math.sin(rand(0,TAU))*rand(60,200),t:0});
+}
+
+// Particles
+const parts=[];
+function burst(x,y,count=14,baseHue=200,nx=0,ny=0){
+  // Richtungsvorspannung (nx,ny) — wird normalisiert
+  const nlen=Math.hypot(nx,ny)||0; const bx=nlen?nx/nlen:0; const by=nlen?ny/nlen:0;
+  for(let i=0;i<count;i++){
+    const ang=rand(0,TAU); const spd=rand(120,420); const bias=rand(60,220);
+    const vx=Math.cos(ang)*spd + bx*bias; const vy=Math.sin(ang)*spd + by*bias;
+    parts.push({x,y,vx,vy,life:rand(.25,.6),t:0,size:rand(2,5),hue:baseHue+rand(-20,20),glow:rand(.5,1.5)});
+  }
+}
+
+// Time & FX
+let last=performance.now(); let timeScale=1; let freezeTimer=0; let slowmoTimer=0;
+const staminaFill=document.getElementById('staminaFill');
+const comboEl=document.getElementById('combo');
+const scoreEl=document.getElementById('score');
+const centerFlash=document.getElementById('centerFlash');
+let combo=0, comboDecay=0;
+function popCombo(){ comboEl.textContent='x'+combo; comboEl.style.opacity=1; comboEl.style.transform='scale(1.2)'; setTimeout(()=>comboEl.style.transform='scale(1)',60); clearTimeout(popCombo._hide); popCombo._hide=setTimeout(()=>comboEl.style.opacity=0,1000); }
+function flashCenter(){ centerFlash.style.transition='opacity 60ms ease-out'; centerFlash.style.opacity=1; setTimeout(()=> centerFlash.style.opacity=0,60); }
+
+// ===== Loop =====
+function loop(now){
+  const rawDt=(now-last)/1000; last=now;
+  if(freezeTimer>0){ freezeTimer-=rawDt; draw(0); return requestAnimationFrame(loop); }
+  let dt=rawDt*timeScale; if(slowmoTimer>0){ slowmoTimer-=rawDt; timeScale=.35; } else timeScale=1;
+  update(dt); draw(dt); requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ===== Update =====
+function update(dt){
+  // Aim
+  const sx=canvas.width/dpr, sy=canvas.height/dpr; const cx=sx/2, cy=sy/2;
+  const aimX=mouse.x+cam.x-player.x, aimY=mouse.y+cam.y-player.y; player.dir=Math.atan2(aimY,aimX);
+
+  // Movement
+  let ax=0,ay=0; if(keys.has('w')) ay-=1; if(keys.has('s')) ay+=1; if(keys.has('a')) ax-=1; if(keys.has('d')) ax+=1; const len=Math.hypot(ax,ay)||1; ax/=len; ay/=len;
+
+  // Dash
+  player.dashCd=Math.max(0,player.dashCd-dt);
+  if(keys.has('shift') && player.dashCd<=0 && player.stamina>=.25){ player.dashTime=player.dashDur; player.dashCd=.3; player.stamina=Math.max(0,player.stamina-.25); burst(player.x,player.y,10,195,Math.cos(player.dir),Math.sin(player.dir)); cam.shake=Math.max(cam.shake,8); sfx.dash(); }
+
+  // Stamina regen
+  player.stamina=clamp(player.stamina+dt*.35,0,1);
+
+  // Light attack
+  player.attackCd=Math.max(0,player.attackCd-dt);
+  if((mouse.down||keys.has(' '))&& player.attackCd<=0){ player.swinging=true; player.swingT=0; player.attackCd=.22; player.swingDir=(Math.random()<.5?-1:1); player.swingDmg=1; }
+
+  // Heavy attack
+  player.heavyCd=Math.max(0,player.heavyCd-dt);
+  if(mouse.rdown && player.heavyCd<=0 && !player.heavying){ player.heavying=true; player.heavyT=0; }
+  if(player.heavying){ player.heavyT+=dt; if(player.heavyT>=player.heavyWind){ player.heavying=false; player.heavyCd=.6; player.swinging=true; player.swingT=0; player.swingDir=(Math.random()<.5?-1:1); player.swingDmg=2; sfx.heavy(); }}
+
+  // Ranged bolt
+  player.shootCd=Math.max(0,player.shootCd-dt);
+  if(keys.has('e') && player.shootCd<=0 && player.stamina>=.15){ const sp=900, a=player.dir; player.shootCd=.25; player.stamina=Math.max(0,player.stamina-.15); bolts.push({x:player.x+Math.cos(a)*20,y:player.y+Math.sin(a)*20,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.9,t:0,dmg:1}); sfx.shoot(); }
+
+  // Velocity
+  if(player.dashTime>0){ player.dashTime-=dt; player.vx=Math.cos(player.dir)*player.dashSpeed; player.vy=Math.sin(player.dir)*player.dashSpeed; }
+  else { player.vx=ax*player.speed; player.vy=ay*player.speed; }
+  player.x=clamp(player.x+player.vx*dt,40,world.w-40); player.y=clamp(player.y+player.vy*dt,40,world.h-40);
+
+  // Trail
+  if(player.dashTime>0 || Math.hypot(player.vx,player.vy)>player.speed*.9) player.trail.push({x:player.x,y:player.y,r:player.r,t:0});
+  for(let i=player.trail.length-1;i>=0;i--){ const tr=player.trail[i]; tr.t+=dt; if(tr.t>.2) player.trail.splice(i,1); }
+
+  // Enemy AI
+  for(const e of enemies){
+    if(e.iFrames>0) e.iFrames-=dt; if(e.flicker>0) e.flicker-=dt; e.ai.t+=dt; e.ai.cooldown=Math.max(0,e.ai.cooldown-dt);
+    const dx=player.x-e.x, dy=player.y-e.y; const d=Math.hypot(dx,dy)||1; const dirx=dx/d, diry=dy/d;
+    if(e.type==='grunt'){ const sp=e.speed*(d>220?1:.55); e.vx=dirx*sp; e.vy=diry*sp; }
+    else if(e.type==='charger'){ if(e.ai.cooldown<=0 && d<420){ const lsp=560; e.vx=dirx*lsp; e.vy=diry*lsp; e.ai.cooldown=1.2; cam.shake=Math.max(cam.shake,6);} else { e.vx=dirx*e.speed; e.vy=diry*e.speed; } }
+    else if(e.type==='shooter'){ const pref=380; const sp=e.speed*(d>pref?1:-.8); e.vx=dirx*sp; e.vy=diry*sp; if(d>160 && d<520 && e.ai.cooldown<=0){ const ang=Math.atan2(dy,dx); const spb=360; bullets.push({x:e.x+Math.cos(ang)*18,y:e.y+Math.sin(ang)*18,vx:Math.cos(ang)*spb,vy:Math.sin(ang)*spb,life:2,t:0}); e.ai.cooldown=.9; sfx.shoot(); } }
+    else if(e.type==='tank'){ const sp=e.speed; e.vx=dirx*sp; e.vy=diry*sp; }
+    e.x=clamp(e.x+e.vx*dt,30,world.w-30); e.y=clamp(e.y+e.vy*dt,30,world.h-30);
+  }
+
+  // Swing damage cone
+  if(player.swinging){
+    player.swingT+= dt / (player.swingDmg>1?0.18:0.14);
+    if(player.swingT>=1){ player.swinging=false; player.swingT=0; }
+    const swingAngle=player.dir + (player.swingDir*(Math.PI/2)*(player.swingT-0.5));
+    for(const e of enemies){
+      const dx=e.x-player.x, dy=e.y-player.y; const d=Math.hypot(dx,dy);
+      if(d < (player.swingDmg>1?110:80)){
+        const ang=Math.atan2(dy,dx); const diff=Math.atan2(Math.sin(ang-swingAngle), Math.cos(ang-swingAngle));
+        if(Math.abs(diff) < (player.swingDmg>1?0.75:0.55) && e.iFrames<=0){
+          e.hp-=player.swingDmg; e.iFrames=.2; e.flicker=.12; e.x+=Math.cos(player.dir)*16; e.y+=Math.sin(player.dir)*16; const k=player.swingDmg>1?320:240; e.vx=Math.cos(player.dir)*k; e.vy=Math.sin(player.dir)*k;
+          burst(e.x,e.y, player.swingDmg>1?26:18, player.swingDmg>1?35:12, Math.cos(player.dir), Math.sin(player.dir));
+          cam.shake=Math.max(cam.shake, player.swingDmg>1?18:14); freezeTimer=player.swingDmg>1?0.05:0.035; slowmoTimer=0.12; flashCenter(); sfx.hit();
+          combo+=player.swingDmg; comboDecay=1.7; popCombo(); score+=2*player.swingDmg;
+        }
+      }
+    }
+  }
+
+  // Player bolts
+  for(let i=bolts.length-1;i>=0;i--){ const b=bolts[i]; b.t+=dt; b.x+=b.vx*dt; b.y+=b.vy*dt; if(b.t>b.life){ bolts.splice(i,1); continue; }
+    for(const e of enemies){ if(e.iFrames>0) continue; const d=Math.hypot(e.x-b.x,e.y-b.y); if(d<e.r+6){ e.hp-=b.dmg; e.iFrames=.1; e.flicker=.1; burst(b.x,b.y,10,190,b.vx,b.vy); cam.shake=Math.max(cam.shake,8); sfx.hit(); combo++; comboDecay=1.6; popCombo(); score+=1; bolts.splice(i,1); break; } }
+  }
+
+  // Enemy bullets
+  for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.t+=dt; b.x+=b.vx*dt; b.y+=b.vy*dt; if(b.t>b.life) bullets.splice(i,1); }
+
+  // Combo decay
+  if(combo>0){ comboDecay-=dt; if(comboDecay<=0){ combo=Math.max(0,combo-1); comboDecay=combo>0?0.15:0; popCombo(); } }
+
+  // Death & respawn
+  for(let i=enemies.length-1;i>=0;i--){ if(enemies[i].hp<=0){ dropGems(enemies[i].x,enemies[i].y); burst(enemies[i].x,enemies[i].y,26,35); enemies.splice(i,1); setTimeout(spawnEnemy,600); score+=10; } }
+
+  // Gems + Magnet
+  for(let i=gems.length-1;i>=0;i--){ const g=gems[i]; g.t+=dt; const mx=player.x-g.x, my=player.y-g.y; const d=Math.hypot(mx,my)||1; const magnet=d<220?(1-d/220)*420:0; g.vx=(g.vx||0)+(mx/d)*magnet*dt; g.vy=(g.vy||0)+(my/d)*magnet*dt; const damp=Math.exp(-2.2*dt); g.vx*=damp; g.vy*=damp; g.x+=g.vx*dt; g.y+=g.vy*dt; if(d<22){ gems.splice(i,1); gemCount++; score+=3; player.stamina=clamp(player.stamina+0.08,0,1); sfx.pickup(); burst(player.x,player.y,10,180,Math.cos(player.dir),Math.sin(player.dir)); } }
+
+  // Particles update (isotropes Drag)
+  for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.t+=dt; const damp=Math.exp(-2.8*dt); p.vx*=damp; p.vy*=damp; p.x+=p.vx*dt; p.y+=p.vy*dt; if(p.t>=p.life) parts.splice(i,1); }
+
+  // Camera follow + shake
+  cam.x=lerp(cam.x, player.x - cx, 0.18); cam.y=lerp(cam.y, player.y - cy, 0.18); cam.shake=Math.max(0,cam.shake-60*dt); cam.shakeX=rand(-1,1)*cam.shake; cam.shakeY=rand(-1,1)*cam.shake;
+
+  // HUD
+  staminaFill.style.transform=`scaleX(${player.stamina.toFixed(3)})`;
+  scoreEl.textContent=`Score: ${score} • Gems: ${gemCount}`;
+}
+
+// ===== Draw =====
+function draw(){
+  const w=canvas.width/dpr, h=canvas.height/dpr;
+  ctx.clearRect(0,0,w,h);
+  ctx.save();
+  ctx.translate(Math.floor(-cam.x+cam.shakeX), Math.floor(-cam.y+cam.shakeY));
+
+  // Floor grid
+  ctx.fillStyle='#0f1320'; ctx.fillRect(0,0,world.w,world.h);
+  ctx.save(); ctx.globalAlpha=.25; ctx.strokeStyle='#182036'; ctx.lineWidth=1; const step=60; ctx.beginPath();
+  for(let x=0;x<world.w;x+=step){ ctx.moveTo(x,0); ctx.lineTo(x,world.h); }
+  for(let y=0;y<world.h;y+=step){ ctx.moveTo(0,y); ctx.lineTo(world.w,y); }
+  ctx.stroke(); ctx.restore();
+
+  // Particles (additiv)
+  for(const p of parts){ const tt=p.t/(p.life||1); if(tt>1) continue; ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=1-tt; ctx.fillStyle=`hsl(${p.hue} 90% 60%)`; ctx.shadowBlur=16*(p.glow||1); ctx.shadowColor=ctx.fillStyle; ctx.beginPath(); ctx.arc(p.x,p.y,(p.size||3)*(1-tt*.6),0,TAU); ctx.fill(); ctx.restore(); }
+
+  // Gems
+  for(const g of gems){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle='hsl(185 90% 65%)'; ctx.shadowBlur=18; ctx.shadowColor=ctx.fillStyle; star(ctx,g.x,g.y,6,8,4); ctx.fill(); ctx.restore(); }
+
+  // Enemies
+  for(const e of enemies){ ctx.save(); const flick=e.flicker>0?.35:0; ctx.globalAlpha=1-flick; ctx.fillStyle=`hsl(${e.hue} 70% 55%)`; ctx.shadowBlur=18; ctx.shadowColor=ctx.fillStyle; const size=e.type==='tank'?44:36; roundedRect(ctx,e.x-size/2,e.y-size/2,size,size,8); ctx.fill(); ctx.globalAlpha=.9; ctx.shadowBlur=0; for(let i=0;i<e.hp;i++){ ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fillRect(e.x-12+i*8, e.y-(size/2+8), 6,3);} ctx.restore(); }
+
+  // Enemy bullets
+  for(const b of bullets){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle='hsl(15 90% 60%)'; ctx.shadowBlur=12; ctx.shadowColor=ctx.fillStyle; ctx.beginPath(); ctx.arc(b.x,b.y,4,0,TAU); ctx.fill(); ctx.restore(); }
+
+  // Player trail
+  for(const tr of player.trail){ const tt=tr.t/.2; if(tt>1) continue; ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.22*(1-tt); ctx.fillStyle='#8dd5ff'; glowCircle(ctx,tr.x,tr.y,tr.r*(1+tt*.4)); ctx.restore(); }
+
+  // Player body + swing
+  ctx.save(); const scaleKick=slowmoTimer>0?1.08:1; ctx.translate(player.x,player.y); ctx.rotate(player.dir);
+  if(player.swinging){ const t=player.swingT; const a=(t-.5)*Math.PI*1.1*player.swingDir*(player.swingDmg>1?1.2:1); ctx.save(); ctx.rotate(a); ctx.globalCompositeOperation='lighter'; ctx.fillStyle=player.swingDmg>1?'rgba(56,189,248,.95)':'rgba(56,189,248,.85)'; ctx.shadowBlur=18; ctx.shadowColor='#38bdf8'; ctx.beginPath(); ctx.moveTo(12,0); ctx.arc(0,0, player.swingDmg>1?80:60, -.18,.18,false); ctx.lineTo(12,0); ctx.fill(); ctx.restore(); }
+  ctx.scale(scaleKick,scaleKick); ctx.fillStyle=player.color; glowCircle(ctx,0,0,player.r); ctx.fillStyle='white'; ctx.globalAlpha=.6; ctx.fillRect(10,-2,8,4); ctx.restore();
+
+  // Player bolts
+  for(const b of bolts){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle='#8dd5ff'; ctx.shadowBlur=14; ctx.shadowColor=ctx.fillStyle; ctx.beginPath(); ctx.arc(b.x,b.y,5,0,TAU); ctx.fill(); ctx.restore(); }
+
+  ctx.restore();
+
+  // Cursor (Screen Space — kein Kameraoffset)
+  ctx.save();
+  const mx = mouse.x, my = mouse.y;
+  const rr = 10 + (mouse.down?1:0);
+  ctx.globalAlpha = .9; ctx.strokeStyle = 'rgba(173,216,255,.9)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(mx,my,rr,0,TAU); ctx.stroke();
+  ctx.globalAlpha = .35; ctx.beginPath(); ctx.arc(mx,my,rr+6,0,TAU); ctx.stroke();
+  ctx.restore();
+
+  // Overlay slowmo tint
+  if(slowmoTimer>0){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.09; ctx.fillStyle='#8dd5ff'; ctx.fillRect(0,0,w,h); ctx.restore(); }
+}
+
+function glowCircle(ctx,x,y,r){ ctx.save(); ctx.shadowBlur=18; ctx.shadowColor='#8dd5ff'; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill(); ctx.restore(); }
+function roundedRect(ctx,x,y,w,h,r){ const rr=Math.min(r,w/2,h/2); ctx.beginPath(); ctx.moveTo(x+rr,y); ctx.arcTo(x+w,y,x+w,y+h,rr); ctx.arcTo(x+w,y+h,x,y+y,h=rr); }
+function star(ctx,x,y,outer,inner,points){ ctx.beginPath(); for(let i=0;i<points*2;i++){ const a=i*Math.PI/points; const rad=i%2?inner:outer; ctx.lineTo(x+Math.cos(a)*rad, y+Math.sin(a)*rad);} ctx.closePath(); }
+
+document.addEventListener('visibilitychange',()=>{ last=performance.now(); });
+</script>
+</body>
+</html>
